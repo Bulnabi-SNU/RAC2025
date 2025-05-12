@@ -12,7 +12,7 @@ px4_msgs: main
 gazebo는 나는 fortress 버전 쓰긴 했는데 classic도 될거임 아마.
 
 ## Installation
-'''
+'''bash
 git clone https://github.com/Bulnabi-SNU/RAC2025.git
 cd RAC2025
 colcon build --symlink-install
@@ -21,23 +21,23 @@ colcon build --symlink-install
 ## How to Use
 
 Terminal 1 : PX4 SITL
-'''
+'''bash
 cd PX4-Autopilot
 make px4_sitl gz_standard_vtol
 '''
 
 Terminal 2 : Micro-XRCE-DDS
-'''
+'''bash
 MicroXRCEAgent udp4 -p 8888
 '''
 
 Terminal 3 : Q Ground Control
-'''
+'''bash
 ./QGroundControl.AppImage
 '''
 
 Terminal 3 : Q Ground Control
-'''
+'''bash
 cd RAC2025
 rosfoxy # alias
 ros2 run vehicle_controller vehicle_controller
