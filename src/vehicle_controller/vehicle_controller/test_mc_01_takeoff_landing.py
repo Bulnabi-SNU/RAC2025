@@ -1,5 +1,5 @@
-__author__ = "Gyeongrak Choe"
-__contact__ = "rudfkr5978@snu.ac.kr"
+__author__ = "Chaewon Yun"
+__contact__ = "gbll0305@snu.ac.kr"
 
 # import rclpy
 import rclpy
@@ -145,7 +145,7 @@ class VehicleController(Node):
                     print("Arming...")
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) # Arming 하기
                 else:
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param7=5.0) # Take off 하기, param7 = height
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off 하기, param7 = height
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
                 if not self.get_position_flag: # set home position 하기 전에 position topic을 받았는 지 확인
                     print("Waiting for position data")
