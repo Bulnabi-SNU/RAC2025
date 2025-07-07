@@ -1,0 +1,27 @@
+{
+  "name": "DevContainer",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "ros2",
+  "workspaceFolder": "/workspace",
+  // "remoteUser": "bulnabi",
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker",
+        "visualstudioexptteam.vscodeintellicode"
+      ]
+    }
+  },
+  "postCreateCommand": "pip install --upgrade pip && pip install pylint black && pip install --upgrade \"setuptools<66\""
+}

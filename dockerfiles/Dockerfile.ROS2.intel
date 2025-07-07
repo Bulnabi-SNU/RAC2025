@@ -1,0 +1,90 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set locale
+RUN apt-get update && apt-get install -y locales && \
+    locale-gen en_US en_US.UTF-8
+RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+
+#
+# Installing ROS 2 Humble
+#
+
+# Enable repositories
+RUN apt-get install -y software-properties-common
+RUN add-apt-repository universe
+
+# Install ROS 2 Humble
+RUN apt-get update && \
+    apt-get install -y curl && \
+    export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}') && \
+    curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $VERSION_CODENAME)_all.deb" && \
+    dpkg -i /tmp/ros2-apt-source.deb && \
+    apt-get update && apt-get upgrade -y && \ 
+    apt-get install -y ros-humble-desktop
+
+# Install colcon
+RUN apt-get install -y python3-colcon-common-extensions
+
+#
+# Misc. Setup
+#
+
+# Install additional packages
+
+RUN apt-get install -y sudo vim git python3-pip python3-dev 
+
+# Install python packages
+RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
+   # Computer Vision
+   opencv-python \
+   opencv-contrib-python \
+   # Machine Learning
+   torch \
+   torchvision \
+   torchaudio \
+   # YOLO and object detection
+   ultralytics \
+   yolov5 \
+   # Core scientific computing
+   numpy \
+   scipy \
+   scikit-learn \
+   scikit-image \
+   # Image processing
+   Pillow \
+   imageio \
+   albumentations \
+   imgaug \
+   # Data handling
+   pandas \
+   matplotlib \
+   # ML utilities
+   timm \
+   transformers \
+   tensorboard \
+   wandb \
+   # Utilities
+   pyyaml 
+
+# Install ROS2 packages
+RUN apt-get install -y ros-humble-ros-gz-bridge
+
+# Create a non-root user
+RUN useradd -m -s /bin/bash bulnabi && \
+    usermod -aG sudo bulnabi && \
+    echo "bulnabi ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to non-root user
+USER bulnabi
+
+# Set up ROS 2 workspace
+WORKDIR /workspace
+
+# Create setup script
+RUN echo '#!/bin/bash\n\
+source /opt/ros/humble/setup.bash\n \
+' > /home/bulnabi/.bashrc

@@ -136,13 +136,14 @@ class VehicleController(Node):
         self.publish_offboard_control_mode(position=False, velocity = True)
 
     def main_callback(self):
+        
         if self.state == 'ready2flight':
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # 처음 상태는 Auto Loiter
                 if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED: # Disarm 이면
                     print("Arming...")
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) # Arming 하기
                 else:
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param7=5.0) # Take off 하기, param7 = height
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param7=100.0) # Take off 하기, param7 = height
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
                 if not self.get_position_flag: # set home position 하기 전에 position topic을 받았는 지 확인
                     print("Waiting for position data")
@@ -158,7 +159,7 @@ class VehicleController(Node):
                 self.state = 'Flying'
 
         if self.state == 'Flying':
-            pos_sp = np.array([0.0, 100.0, -5.0]) # 임시로 정한 setpoint
+            pos_sp = np.array([0.0, 100.0, -.0]) # 임시로 정한 setpoint
             delta = pos_sp - self.pos
             yaw_sp = math.atan2(delta[1], delta[0])
             self.publish_setpoint(vel_sp = self.slow_vmax * delta, yaw_sp = yaw_sp) # Fixed wing 모드는 position이 아니라 velocity, yaw로 제어해야 하는듯
