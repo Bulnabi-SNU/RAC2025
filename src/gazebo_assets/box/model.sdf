@@ -1,0 +1,43 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="composite_model">
+    <static>false</static>
+
+    <!-- Single link for collision + visuals -->
+    <link name="main_link">
+      <pose>0 0 0 0 0 0</pose>
+
+      <!-- Bottom Visual -->
+      <visual name="bottom_visual">
+        <geometry>
+          <mesh>
+            <uri>model://box/meshes/bottom_part.dae</uri>
+            <scale>0.001 0.001 0.001</scale> <!-- mm to meters -->
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- Top Visual -->
+      <visual name="top_visual">
+        <geometry>
+          <mesh>
+            <uri>model://box/meshes/top_part.dae</uri>
+            <scale>0.001 0.001 0.001</scale>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- Single collision mesh -->
+      <collision name="box_collision">
+        <geometry>
+          <mesh>
+            <uri>model://box/meshes/box_collision.stl</uri>
+            <scale>0.001 0.001 0.001</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+
+  </model>
+</sdf>
+
