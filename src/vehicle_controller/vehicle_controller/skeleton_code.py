@@ -48,67 +48,139 @@ class VehicleController(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=1
         )
-        
+
         """
-        2. State variables
+        1. Subscribers & Publishers & Timers
+        """
+        # [Subscribers]
+        # 1. VehicleStatus          : current status of vehicle (ex. offboard)
+        # 2. VehicleLocalPosition   : NED position.
+        # 3. VehicleGlobalPosition  : vehicle global position (lat, lon, alt)
+        self.vehicle_status_subscriber          = self.create_subscription(VehicleStatus,         '/fmu/out/vehicle_status',          self.vehicle_status_callback,          qos_profile)
+        self.vehicle_local_position_subscriber  = self.create_subscription(VehicleLocalPosition,  '/fmu/out/vehicle_local_position',  self.vehicle_local_position_callback,  qos_profile) 
+        self.vehicle_global_position_subscriber = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
+
+        # [Publishers]
+        # 1. VehicleCommand          : vehicle command (e.g., takeoff, land, arm, disarm)
+        # 2. OffboardControlMode     : send offboard signal. important to maintain offboard mode in PX4
+        # 3. TrajectorySetpoint      : trajectory setpoint. send setpoint (position, velocity, acceleration)
+        self.vehicle_command_publisher          = self.create_publisher(VehicleCommand,        '/fmu/in/vehicle_command',          qos_profile)
+        self.offboard_control_mode_publisher    = self.create_publisher(OffboardControlMode,   '/fmu/in/offboard_control_mode',    qos_profile)
+        self.trajectory_setpoint_publisher      = self.create_publisher(TrajectorySetpoint,    '/fmu/in/trajectory_setpoint',      qos_profile)
+        
+        # [Timers]
+        # 1. offboard_heartbeat : send offboard heartbeat to maintain offboard mode
+        # 2. main_timer         : main loop timer for controlling vehicle
+        self.time_period = 0.05     # 20Hz
+        self.offboard_heartbeat = self.create_timer(self.time_period, self.offboard_heartbeat_callback)
+        self.main_timer         = self.create_timer(self.time_period, self.main_callback)
+
+
+        """
+        2. State & Substate
+        """
+        # [Phase discription]
+        # 1. ready2flight   : vehicle is ready to take off
+        # 2. takeoff        : vehicle is taking off
+        # ...
+        # n-1. audo_landing : aline and approach to tag
+        # n. Landing        : vehicle is landing
+        self.state = 'ready2flight'
+
+        # [Substate description]
+        # 1. takeoff : vehicle is taking off
+        # ...
+        self.substate = 'none'
+
+
+        """
+        3. Load GPS Variables
+        """
+        self.home_position = np.array([0.0, 0.0, 0.0])  # set home position
+        self.WP = [np.array([0.0, 0.0, 0.0])]           # waypoints, local coordinates
+        self.gps_WP = [np.array([0.0, 0.0, 0.0])]       # waypoints, global coordinates
+
+        # fetch GPS waypoints from parameters in yaml file
+        self.declare_parameter(f'num_wp', None)
+        num_wp = self.get_parameter(f'num_wp').value
+        for i in range(1, num_wp+1):
+            self.declare_parameter(f'gps_WP{i}', None)
+            gps_wp_value = self.get_parameter(f'gps_WP{i}').value
+            self.gps_WP.append(np.array(gps_wp_value))
+
+
+        """
+        4. Variables: Vehicle state
+        : vehicle informations
         """
         # vehicle status
-        self.state = 'ready2flight'
         self.vehicle_status = VehicleStatus()
         self.vehicle_local_position = VehicleLocalPosition()
 
         # vehicle position, velocity, and yaw
-        self.pos = np.array([0.0, 0.0, 0.0])        # local
-        self.pos_gps = np.array([0.0, 0.0, 0.0])    # global
-        self.vel = np.array([0.0, 0.0, 0.0])
-        self.yaw = 0.0
+        self.pos        = np.array([0.0, 0.0, 0.0])     # local
+        self.pos_gps    = np.array([0.0, 0.0, 0.0])     # global
+        self.vel        = np.array([0.0, 0.0, 0.0])
+        self.yaw        = 0.0
 
-        # set home position
-        self.get_position_flag = False
-        self.home_position = np.array([0.0, 0.0, 0.0])
 
         """
-        3. Bezier variables
+        5: Variables & Constants
+        : bezier, alinement, approach, landing, etc...
         """
-        self.slow_vmax = 2.5
-        self.yaw_speed = 0.1
-        self.arrival_radius = 2.0
-
-        """
-        6. Create Subscribers
-        """
-        self.vehicle_status_subscriber = self.create_subscription(
-            VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile
-        )
-        self.vehicle_local_position_subscriber = self.create_subscription(
-            VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile
-        )
-        self.vehicle_global_position_subscriber = self.create_subscription(
-            VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile
-        )
-
-        """
-        7. Create Publishers
-        """
-        self.vehicle_command_publisher = self.create_publisher(
-            VehicleCommand, '/fmu/in/vehicle_command', qos_profile
-        )
-        self.offboard_control_mode_publisher = self.create_publisher(
-            OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile
-        )
-        self.trajectory_setpoint_publisher = self.create_publisher(
-            TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile
-        )
-
-        """
-        8. timer setup
-        """
-        self.time_period = 0.01
-        self.offboard_heartbeat = self.create_timer(self.time_period, self.offboard_heartbeat_callback)
-        self.main_timer = self.create_timer(self.time_period, self.main_callback)
+        # 1. Hardware constants(given)
+        self.camera_to_center = 0.2     # distance from camera to center of vehicle (m)
+        self.limit_acc = 9.0            # maximum acceleration (m/s^2)
         
-        self.hold_timer = 0
-        self.hold_timer_threshold = 5/self.time_period  # 5sec
+        # 2. Goal position and yaw
+        # Variables
+        self.goal_position = None
+        self.goal_yaw = None
+        # Constants
+        self.mc_acceptance_radius = 0.3
+        self.nearby_acceptance_radius = 30
+        self.offboard_acceptance_radius = 10.0      # mission -> offboard acceptance radius
+        self.transition_acceptance_angle = 0.8      # 0.8 rad = 45.98 deg
+        self.landing_acceptance_angle = 0.8         # 0.8 rad = 45.98 deg
+        self.heading_acceptance_angle = 0.1         # 0.1 rad = 5.73 deg
+
+        # 3. Bezier curve - todo
+        # Variables
+        self.num_bezier = 0
+        self.bezier_counter = 0 
+        self.bezier_points = None
+        # Constants
+        self.very_fast_vmax = 7.0
+        self.fast_vmax = 5.0
+        self.slow_vmax = 2.5
+        self.very_slow_vmax = 1.0
+        self.max_acceleration = 9.81 * np.tan(10 * np.pi / 180)  # 10 degree tilt angle
+        self.mc_start_speed = 0.0001
+        self.mc_end_speed = 0.0001
+        self.bezier_threshold_speed = 0.7
+        self.bezier_minimum_time = 3.0
+
+        # 4. Auto Landing
+        # todo
+
+
+        """
+        6. Detecting target in Image
+        """
+        # todo
+
+        
+        """
+        6. Logging
+        """
+        # todo
+
+
+        """
+        7. Gimbal
+        """
+        # todo
+
     
 
     #============================================
@@ -157,7 +229,6 @@ class VehicleController(Node):
         self.yaw = msg.heading
 
     def vehicle_global_position_callback(self, msg):
-        self.get_position_flag = True
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
     
@@ -196,15 +267,15 @@ class VehicleController(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.offboard_control_mode_publisher.publish(msg)
 
-    def publish_setpoint(self, **kwargs): # 그냥 setpoint를 publish하면 home position 기준의 상대 위치로 받아들임
+    def publish_setpoint(self, **kwargs):
         msg = TrajectorySetpoint()
-        msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)))
+        msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)) + self.home_position )
         msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
         msg.yaw = kwargs.get("yaw_sp", float('nan'))
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
 
-    def publish_local2global_setpoint(self, **kwargs): # home position을 빼서 global 좌표로 바꿔주는 함수
+    def publish_local2global_setpoint(self, **kwargs):
         msg = TrajectorySetpoint()
         local_setpoint = kwargs.get("pos_sp", np.nan * np.zeros(3))
         global_setpoint = local_setpoint - self.home_position
@@ -225,7 +296,7 @@ class VehicleController(Node):
             if delta > 1.0:
                 self.get_logger().warn(f"Heartbeat delay detected: {delta:.3f}s")
         self.last_heartbeat_time = now
-        self.publish_offboard_control_mode(position=False, velocity = True)
+        self.publish_offboard_control_mode(position=True, velocity=False)
 
     def main_callback(self):
         if self.state == 'ready2flight':
