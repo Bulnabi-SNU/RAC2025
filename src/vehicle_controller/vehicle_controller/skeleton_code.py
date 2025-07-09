@@ -77,7 +77,7 @@ class VehicleController(Node):
 
 
         """
-        2. State & Substate
+        2. phase & Subphase
         """
         # [Phase discription]
         # 1. ready2flight   : vehicle is ready to take off
@@ -85,12 +85,12 @@ class VehicleController(Node):
         # ...
         # n-1. audo_landing : aline and approach to tag
         # n. Landing        : vehicle is landing
-        self.state = 'ready2flight'
+        self.phase = 'ready2flight'
 
-        # [Substate description]
+        # [Subphase description]
         # 1. takeoff : vehicle is taking off
         # ...
-        self.substate = 'none'
+        self.subphase = 'none'
 
 
         """
@@ -110,7 +110,7 @@ class VehicleController(Node):
 
 
         """
-        4. Variables: Vehicle state
+        4. Variables: Vehicle phase
         : vehicle informations
         """
         # vehicle status
@@ -299,7 +299,7 @@ class VehicleController(Node):
         self.publish_offboard_control_mode(position=True, velocity=False)
 
     def main_callback(self):
-        if self.state == 'ready2flight':
+        if self.phase == 'ready2flight':
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
                 if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED: # Disarm 이면
                     print("Arming...")
@@ -312,19 +312,19 @@ class VehicleController(Node):
                     return
                 self.home_position = self.set_home_position() # home position 설정
                 print("Taking off...")
-                self.state = 'takeoff'
+                self.phase = 'takeoff'
 
-        if self.state == 'takeoff':
+        if self.phase == 'takeoff':
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # Take off 끝나면 Auto Loiter로 바뀜
                 if (self.hold_timer > self.hold_timer_threshold):
                     print("landing")
-                    self.state = 'Landing'
+                    self.phase = 'Landing'
                 else:
                     if self.hold_timer%100 == 0:
                         print("holding...")
                     self.hold_timer += 1
 
-        if self.state == 'Landing':
+        if self.phase == 'Landing':
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0) # 착륙
             print("Mission complete")
     
