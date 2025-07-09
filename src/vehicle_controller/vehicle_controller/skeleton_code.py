@@ -22,6 +22,8 @@ from px4_msgs.msg import TrajectorySetpoint
 # import other libraries
 import os, math
 import numpy as np
+# gps
+import pymap3d as p3d
 # log
 import logging
 from datetime import datetime, timedelta
@@ -85,7 +87,7 @@ class VehicleController(Node):
         # ...
         # n-1. audo_landing : aline and approach to tag
         # n. Landing        : vehicle is landing
-        self.phase = 'ready2flight'
+        self.phase = 0
 
         # [Subphase description]
         # 1. takeoff : vehicle is taking off
@@ -97,13 +99,15 @@ class VehicleController(Node):
         3. Load GPS Variables
         """
         self.home_position = np.array([0.0, 0.0, 0.0])  # set home position
-        self.WP = [np.array([0.0, 0.0, 0.0])]           # waypoints, local coordinates
-        self.gps_WP = [np.array([0.0, 0.0, 0.0])]       # waypoints, global coordinates
+        self.start_yaw = 0.0                            # set start yaw
+        self.WP = [np.array([0.0, 0.0, 0.0])]           # waypoints, local coordinates. 1~num_wp
+        self.gps_WP = [np.array([0.0, 0.0, 0.0])]       # waypoints, global coordinates. 1~num_wp
+        self.WP_tag = np.array([0.0, 0.0, 0.0])         # WP for recognizing tag, (not used yet)
 
         # fetch GPS waypoints from parameters in yaml file
         self.declare_parameter(f'num_wp', None)
-        num_wp = self.get_parameter(f'num_wp').value
-        for i in range(1, num_wp+1):
+        self.num_wp = self.get_parameter(f'num_wp').value
+        for i in range(1, self.num_wp+1):
             self.declare_parameter(f'gps_WP{i}', None)
             gps_wp_value = self.get_parameter(f'gps_WP{i}').value
             self.gps_WP.append(np.array(gps_wp_value))
@@ -187,32 +191,19 @@ class VehicleController(Node):
     # Helper Functions
     #============================================
 
-    def set_home_position(self):
-        """Convert global GPS coordinates to local coordinates relative to home position"""     
-        R = 6371000.0  # Earth radius in meters
-        try:
-            lat1 = float(os.environ.get('PX4_HOME_LAT', 0.0))
-            lon1 = float(os.environ.get('PX4_HOME_LON', 0.0))
-            alt1 = float(os.environ.get('PX4_HOME_ALT', 0.0))
-        except (ValueError, TypeError) as e:
-            self.get_logger().error(f"Error converting environment variables: {e}")
-            lat1, lon1, alt1 = 0.0, 0.0, 0.0
-            
-        lat2, lon2, alt2 = self.pos_gps
-        
-        if lat1 == 0.0 and lon1 == 0.0:
-            self.get_logger().warn("No home position in environment variables, using current position")
-            self.home_position = np.array([0.0, 0.0, 0.0])
-            return self.home_position
+    def set_home_local_position(self, home_gps_pos):
+        # 'start point' of mission in local coordinates
+        self.home_position = self.pos
+        self.start_yaw = self.yaw
 
-        lat1, lon1 = np.radians(lat1), np.radians(lon1)
-        lat2, lon2 = np.radians(lat2), np.radians(lon2)
+        # convert GPS waypoints to local coordinates relative to home position
+        for i in range(len(self.num_wp)):
+            # gps_WP = [lat, lon, rel_alt]
+            wp_position = p3d.geodetic2ned(self.gps_WP[i][0], self.gps_WP[i][1], self.gps_WP[i][2] + home_gps_pos[2],
+                                            home_gps_pos[0], home_gps_pos[1], home_gps_pos[2])
+            wp_position = np.array(wp_position)
+            self.WP.append(wp_position)
         
-        x_ned = R * (lat2 - lat1)  # North
-        y_ned = R * (lon2 - lon1) * np.cos(lat1)  # East
-        z_ned = -(alt2 - alt1)  # Down
-
-        return np.array([x_ned, y_ned, z_ned])
 
     #============================================
     # "Subscriber" Callback Functions
@@ -227,6 +218,9 @@ class VehicleController(Node):
         self.pos = np.array([msg.x, msg.y, msg.z])
         self.vel = np.array([msg.vx, msg.vy, msg.vz])
         self.yaw = msg.heading
+        if self.phase != -1:
+            # set position relative to the home position after takeoff
+            self.pos = self.pos - self.home_position
 
     def vehicle_global_position_callback(self, msg):
         self.vehicle_global_position = msg
@@ -274,16 +268,7 @@ class VehicleController(Node):
         msg.yaw = kwargs.get("yaw_sp", float('nan'))
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
-
-    def publish_local2global_setpoint(self, **kwargs):
-        msg = TrajectorySetpoint()
-        local_setpoint = kwargs.get("pos_sp", np.nan * np.zeros(3))
-        global_setpoint = local_setpoint - self.home_position
-        msg.position = list(global_setpoint)
-        msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
-        msg.yaw = kwargs.get("yaw_sp", float('nan'))
-        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        self.trajectory_setpoint_publisher.publish(msg)
+    
     
     #============================================
     # "Timer" Callback Functions
@@ -299,38 +284,47 @@ class VehicleController(Node):
         self.publish_offboard_control_mode(position=True, velocity=False)
 
     def main_callback(self):
-        if self.phase == 'ready2flight':
+        if self.phase == 0:
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED: # Disarm 이면
+                if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED:
                     print("Arming...")
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) # Arming 하기
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
                 else:
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off 하기, param7 = height
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off, param7 = height
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
-                if not self.get_position_flag: # set home position 하기 전에 position topic을 받았는 지 확인
-                    print("Waiting for position data")
-                    return
-                self.home_position = self.set_home_position() # home position 설정
+                self.set_home_local_position(self.pos_gps) # set home position & gps2local
                 print("Taking off...")
-                self.phase = 'takeoff'
+                self.phase = 1
 
-        if self.phase == 'takeoff':
-            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # Take off 끝나면 Auto Loiter로 바뀜
-                if (self.hold_timer > self.hold_timer_threshold):
-                    print("landing")
-                    self.phase = 'Landing'
-                else:
-                    if self.hold_timer%100 == 0:
-                        print("holding...")
-                    self.hold_timer += 1
+        if self.phase == 1:
+            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # Take off -> Auto Loiter
+                self.publish_vehicle_command(
+                        VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 
+                        param1=1.0, # main mode
+                        param2=6.0  # offboard
+                    )
+            elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                """
+                TODO
+                """
 
-        if self.phase == 'Landing':
+        if self.phase == 2:
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0) # 착륙
             print("Mission complete")
     
 
 
-
+#============================================
+# Additional Functions
+# (e.g., Gimbal, jetson, etc.)
+#============================================
+def is_jetson():
+    # if jetson, return True
+    try:
+        with open('/etc/nv_tegra_release', 'r') as f:
+            return True
+    except FileNotFoundError:
+        return False
 
 
 def main(args = None):
