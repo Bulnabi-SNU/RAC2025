@@ -1,5 +1,5 @@
-__author__ = "Chaewon Yun"
-__contact__ = "gbll0305@snu.ac.kr"
+__author__ = "Gyeongrak Choe"
+__contact__ = "rudfkr5978@snu.ac.kr"
 
 # import rclpy
 import rclpy
@@ -34,31 +34,25 @@ class VehicleController(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=1
         )
-        
+
         """
         2. State variables
         """
-        # vehicle status
         self.state = 'ready2flight'
         self.vehicle_status = VehicleStatus()
         self.vehicle_local_position = VehicleLocalPosition()
 
-        # vehicle position, velocity, and yaw
-        self.pos = np.array([0.0, 0.0, 0.0])        # local
-        self.pos_gps = np.array([0.0, 0.0, 0.0])    # global
+        self.pos = np.array([0.0, 0.0, 0.0])
+        self.pos_gps = np.array([0.0, 0.0, 0.0])
         self.vel = np.array([0.0, 0.0, 0.0])
         self.yaw = 0.0
 
-        # set home position
         self.get_position_flag = False
         self.home_position = np.array([0.0, 0.0, 0.0])
 
-        """
-        3. Bezier variables
-        """
-        self.slow_vmax = 2.5
+        self.slow_vmax = 1.0
         self.yaw_speed = 0.1
-        self.arrival_radius = 2.0
+        self.arrival_radius = 1.0
 
         """
         6. Create Subscribers
@@ -87,48 +81,22 @@ class VehicleController(Node):
         )
 
         """
-        8. timer setup
+        8. Timer setup
         """
         self.time_period = 0.01
         self.offboard_heartbeat = self.create_timer(self.time_period, self.offboard_heartbeat_callback)
         self.main_timer = self.create_timer(self.time_period, self.main_callback)
-        
-        self.hold_timer = 0
-        self.hold_timer_threshold = 5/self.time_period  # 5sec
-    
-    """
-    Helper Functions
-    """
-    def set_home_position(self):
-        """Convert global GPS coordinates to local coordinates relative to home position"""     
-        R = 6371000.0  # Earth radius in meters
-        try:
-            lat1 = float(os.environ.get('PX4_HOME_LAT', 0.0))
-            lon1 = float(os.environ.get('PX4_HOME_LON', 0.0))
-            alt1 = float(os.environ.get('PX4_HOME_ALT', 0.0))
-        except (ValueError, TypeError) as e:
-            self.get_logger().error(f"Error converting environment variables: {e}")
-            lat1, lon1, alt1 = 0.0, 0.0, 0.0
-            
-        lat2, lon2, alt2 = self.pos_gps
-        
-        if lat1 == 0.0 and lon1 == 0.0:
-            self.get_logger().warn("No home position in environment variables, using current position")
-            self.home_position = np.array([0.0, 0.0, 0.0])
-            return self.home_position
 
-        lat1, lon1 = np.radians(lat1), np.radians(lon1)
-        lat2, lon2 = np.radians(lat2), np.radians(lon2)
-        
-        x_ned = R * (lat2 - lat1)  # North
-        y_ned = R * (lon2 - lon1) * np.cos(lat1)  # East
-        z_ned = -(alt2 - alt1)  # Down
+        # Relative (Δx, Δy, Δz) square flight path
+        self.square_points = [
+            np.array([0.0, 5.0, 0.0]),
+            np.array([5.0, 0.0, 0.0]),
+            np.array([0.0, -5.0, 0.0]),
+            np.array([-5.0, 0.0, 0.0])
+        ]
+        self.current_point_index = 0
+        self.start_position = None
 
-        return np.array([x_ned, y_ned, z_ned])
-    
-    """
-    Callback functions for the timers
-    """    
     def offboard_heartbeat_callback(self):
         now = self.get_clock().now()
         if hasattr(self, 'last_heartbeat_time'):
@@ -136,45 +104,60 @@ class VehicleController(Node):
             if delta > 1.0:
                 self.get_logger().warn(f"Heartbeat delay detected: {delta:.3f}s")
         self.last_heartbeat_time = now
-        self.publish_offboard_control_mode(position=False, velocity = True)
+        self.publish_offboard_control_mode(position=False, velocity=True)
 
     def main_callback(self):
         if self.state == 'ready2flight':
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED: # Disarm 이면
+                if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED:
                     print("Arming...")
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) # Arming 하기
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
                 else:
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off 하기, param7 = height
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param7=5.0)
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
-                if not self.get_position_flag: # set home position 하기 전에 position topic을 받았는 지 확인
+                if not self.get_position_flag:
                     print("Waiting for position data")
                     return
-                self.home_position = self.set_home_position() # home position 설정
+                self.home_position = self.set_home_position()
                 print("Taking off...")
                 self.state = 'takeoff'
 
-        if self.state == 'takeoff':
-            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # Take off 끝나면 Auto Loiter로 바뀜
-                if (self.hold_timer > self.hold_timer_threshold):
-                    print("landing")
-                    self.state = 'Landing'
-                else:
-                    if self.hold_timer%100 == 0:
-                        print("holding...")
-                    self.hold_timer += 1
+        elif self.state == 'takeoff':
+            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER:
+                print("Switching to OFFBOARD mode...")
+                self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)  # offboard mode
+                print("Starting square flight...")
+                self.state = 'Flying'
 
-        if self.state == 'Landing':
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0) # 착륙
+        elif self.state == 'Flying':
+            if self.current_point_index < len(self.square_points):
+                if self.start_position is None:
+                    self.start_position = np.copy(self.pos)
+
+                delta = self.square_points[self.current_point_index]
+                target = self.start_position + delta
+                direction = target - self.pos
+                distance = np.linalg.norm(direction)
+
+                if distance < self.arrival_radius:
+                    print(f"Reached point {self.current_point_index + 1}")
+                    self.current_point_index += 1
+                    self.start_position = None
+                else:
+                    yaw_sp = math.atan2(direction[1], direction[0])
+                    vel = self.slow_vmax * direction / distance
+                    self.publish_setpoint(vel_sp=vel, yaw_sp=yaw_sp)
+            else:
+                print("Square flight complete. Landing...")
+                self.state = 'Landing'
+
+        elif self.state == 'Landing':
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0)
             print("Mission complete")
-            
-    """
-    Callback functions for subscribers.
-    """        
+
     def vehicle_status_callback(self, msg):
-        """Callback function for vehicle_status topic subscriber."""
         self.vehicle_status = msg
-    
+
     def vehicle_local_position_callback(self, msg):
         self.vehicle_local_position = msg
         self.pos = np.array([msg.x, msg.y, msg.z])
@@ -186,11 +169,7 @@ class VehicleController(Node):
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
 
-    """
-    Functions for publishing topics.
-    """
     def publish_vehicle_command(self, command, **kwargs):
-        """Publish a vehicle command."""
         msg = VehicleCommand()
         msg.command = command
         msg.param1 = kwargs.get("param1", float('nan'))
@@ -207,7 +186,7 @@ class VehicleController(Node):
         msg.from_external = True
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
-    
+
     def publish_offboard_control_mode(self, **kwargs):
         msg = OffboardControlMode()
         msg.position = kwargs.get("position", False)
@@ -220,7 +199,7 @@ class VehicleController(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.offboard_control_mode_publisher.publish(msg)
 
-    def publish_setpoint(self, **kwargs): # 그냥 setpoint를 publish하면 home position 기준의 상대 위치로 받아들임
+    def publish_setpoint(self, **kwargs):
         msg = TrajectorySetpoint()
         msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)))
         msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
@@ -228,22 +207,37 @@ class VehicleController(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
 
-    def publish_local2global_setpoint(self, **kwargs): # home position을 빼서 global 좌표로 바꿔주는 함수
-        msg = TrajectorySetpoint()
-        local_setpoint = kwargs.get("pos_sp", np.nan * np.zeros(3))
-        global_setpoint = local_setpoint - self.home_position
-        msg.position = list(global_setpoint)
-        msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
-        msg.yaw = kwargs.get("yaw_sp", float('nan'))
-        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        self.trajectory_setpoint_publisher.publish(msg)
-    
-def main(args = None):
-    rclpy.init(args=args)
+    def set_home_position(self):
+        R = 6371000.0
+        try:
+            lat1 = float(os.environ.get('PX4_HOME_LAT', 0.0))
+            lon1 = float(os.environ.get('PX4_HOME_LON', 0.0))
+            alt1 = float(os.environ.get('PX4_HOME_ALT', 0.0))
+        except (ValueError, TypeError) as e:
+            self.get_logger().error(f"Error converting environment variables: {e}")
+            lat1, lon1, alt1 = 0.0, 0.0, 0.0
 
+        lat2, lon2, alt2 = self.pos_gps
+
+        if lat1 == 0.0 and lon1 == 0.0:
+            self.get_logger().warn("No home position in environment variables, using current position")
+            self.home_position = np.array([0.0, 0.0, 0.0])
+            return self.home_position
+
+        lat1, lon1 = np.radians(lat1), np.radians(lon1)
+        lat2, lon2 = np.radians(lat2), np.radians(lon2)
+
+        x_ned = R * (lat2 - lat1)
+        y_ned = R * math.cos(lat1) * (lon2 - lon1)
+        z_ned = alt2 - alt1
+
+        self.home_position = np.array([x_ned, y_ned, z_ned])
+        return self.home_position
+
+def main(args=None):
+    rclpy.init(args=args)
     vehicle_controller = VehicleController()
     rclpy.spin(vehicle_controller)
-
     vehicle_controller.destroy_node()
     rclpy.shutdown()
 

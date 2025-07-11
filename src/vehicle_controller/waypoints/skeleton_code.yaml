@@ -1,0 +1,7 @@
+vehicle_controller: # name of node
+  ros__parameters: # must be added. grammer issue
+    num_wp: 4
+    gps_WP1: [36.465079, 126.950152, 0.0] # Example GPS waypoint
+    gps_WP1: [36.465021, 126.950368, 0.0]
+    gps_WP1: [36.464898, 126.950202, 0.0]
+    gps_WP1: [36.465053, 126.950023, 0.0]
