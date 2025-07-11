@@ -20,9 +20,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vehicle_controller = vehicle_controller.vehicle_controller:main',
-            'test_mc_01 = vehicle_controller.test_mc_01_takeoff_landing:main',
-            'test_mc_02 = vehicle_controller.test_mc_01_square:main',
+            'skeleton = vehicle_controller.skeleton_code:main',
+            'mc_test_01 = vehicle_controller.mc_test_01_takeoff_landing:main',
+            'mc_test_02 = vehicle_controller.mc_test_02_square:main',
         ],
     },
 )

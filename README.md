@@ -22,26 +22,32 @@ colcon build --symlink-install
 ## How to Use
 
 Terminal 1 : PX4 SITL
-'''
+```
 cd PX4-Autopilot
 make px4_sitl gz_standard_vtol
-'''
+```
 
 
 Terminal 2 : Micro-XRCE-DDS
-'''
+```
 MicroXRCEAgent udp4 -p 8888
-'''
+```
+
 
 Terminal 3 : Q Ground Control
-'''
+```
 ./QGroundControl.AppImage
-'''
+```
 
 
-Terminal 3 : Q Ground Control
-'''
+Terminal 4 : run ROS2 node
+```
 cd RAC2025
-rosfoxy # alias
-ros2 run vehicle_controller vehicle_controller
-'''
+roshumble # alias
+ros2 run vehicle_controller mc_test_01
+
+# run SITL with yaml file
+ros2 run <package> <node> --ros-args --params-file <.yaml file path>
+
+ros2 run test_nodes mc_test_01 --ros-args --params-file ~/RAC2025/src/vehicle_controller/waypoints/skeleton_code.yaml
+```
