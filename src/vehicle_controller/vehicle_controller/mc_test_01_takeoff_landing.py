@@ -64,7 +64,7 @@ class VehicleController(Node):
         6. Create Subscribers
         """
         self.vehicle_status_subscriber = self.create_subscription(
-            VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile
+            VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile
         )
         self.vehicle_local_position_subscriber = self.create_subscription(
             VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile
@@ -94,7 +94,7 @@ class VehicleController(Node):
         self.main_timer = self.create_timer(self.time_period, self.main_callback)
         
         self.hold_timer = 0
-        self.hold_timer_threshold = 5/self.time_period  # 5sec
+        self.hold_timer_threshold = 10/self.time_period  # 5sec
     
     """
     Helper Functions
@@ -130,6 +130,7 @@ class VehicleController(Node):
     Callback functions for the timers
     """    
     def offboard_heartbeat_callback(self):
+
         now = self.get_clock().now()
         if hasattr(self, 'last_heartbeat_time'):
             delta = (now - self.last_heartbeat_time).nanoseconds / 1e9
@@ -140,13 +141,17 @@ class VehicleController(Node):
 
     def main_callback(self):
         if self.state == 'ready2flight':
+            print(self.vehicle_status)
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                print(self.vehicle_status.arming_state)
                 if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED: # Disarm 이면
                     print("Arming...")
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) # Arming 하기
                 else:
+                    print("Armed")
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off 하기, param7 = height
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
+                print("Autotakeoff")
                 if not self.get_position_flag: # set home position 하기 전에 position topic을 받았는 지 확인
                     print("Waiting for position data")
                     return
