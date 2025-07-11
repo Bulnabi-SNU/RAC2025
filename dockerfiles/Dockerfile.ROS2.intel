@@ -29,6 +29,9 @@ RUN apt-get update && \
 # Install colcon
 RUN apt-get install -y python3-colcon-common-extensions
 
+
+
+
 #
 # Misc. Setup
 #
@@ -71,9 +74,13 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
    pyyaml 
 
 # Install ROS2 packages
-RUN apt-get install -y ros-humble-ros-gz-bridge
+RUN sudo curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+
+RUN apt-get update -m && apt-get install -m -y  ros-humble-ros-gzharmonic
 
 RUN pip install --upgrade pip && pip install pylint black && pip install --upgrade "setuptools<66"
+
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash bulnabi && \
