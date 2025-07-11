@@ -98,7 +98,8 @@ class VehicleController(Node):
         """
         3. Load GPS Variables
         """
-        self.home_position = np.array([0.0, 0.0, 0.0])  # set home position
+        # take off -> update
+        self.home_position = np.array([0.0, 0.0, 0.0])  # set home position -> local position
         self.start_yaw = 0.0                            # set start yaw
         self.WP = [np.array([0.0, 0.0, 0.0])]           # waypoints, local coordinates. 1~num_wp
         self.gps_WP = [np.array([0.0, 0.0, 0.0])]       # waypoints, global coordinates. 1~num_wp
@@ -291,8 +292,8 @@ class VehicleController(Node):
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
                 else:
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off, param7 = height
+                    self.set_home_local_position(self.pos_gps) # set home position & gps2local
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
-                self.set_home_local_position(self.pos_gps) # set home position & gps2local
                 print("Taking off...")
                 self.phase = 1
 
