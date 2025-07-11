@@ -37,7 +37,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>100 100</size>
+              <size>500 500</size>
             </plane>
           </geometry>
           <material>
@@ -90,12 +90,7 @@
       <longitude_deg> 8.546163739800146</longitude_deg>
       <elevation>0</elevation>
     </spherical_coordinates>
-    <!-- <include>
-      <uri>model://standard_vtol</uri>
-      <pose>0 0 0.3 0 0 0</pose>
-      <name>standard_vtol</name>
-    </include> -->
-    <include>                       <!--Adding Apriltag Model -->
+        <include>                       <!--Adding Apriltag Model -->
       <uri>model://apriltag</uri>
       <pose>0 0 0.01 0 0 0</pose> 
     </include>
