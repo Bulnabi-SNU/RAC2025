@@ -73,6 +73,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
 # Install ROS2 packages
 RUN apt-get install -y ros-humble-ros-gz-bridge
 
+RUN pip install --upgrade pip && pip install pylint black && pip install --upgrade "setuptools<66"
+
 # Create a non-root user
 RUN useradd -m -s /bin/bash bulnabi && \
     usermod -aG sudo bulnabi && \

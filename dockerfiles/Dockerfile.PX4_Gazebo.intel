@@ -34,12 +34,6 @@ WORKDIR /PX4-Autopilot
 
 RUN make -j20 px4_sitl
 
-# Copy world/models
-COPY ../src/gazebo_assets/standard_vtol/ /PX4-Autopilot/Tools/simulation/gz/models/standard_vtol
-COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds/
-COPY ../src/gazebo_assets/box /PX4-Autopilot/Tools/simulation/gz/models/box
-COPY ../src/gazebo_assets/apriltag /PX4-Autopilot/Tools/simulation/gz/models/apriltag
-
 # Set up xRCE-DDS
 
 WORKDIR /tmp/
@@ -52,5 +46,11 @@ RUN cd Micro-XRCE-DDS-Agent && \
     make -j20 && \
     sudo make install && \
     sudo ldconfig /usr/local/lib/
+
+# Copy world/models
+COPY ../src/gazebo_assets/standard_vtol/ /PX4-Autopilot/Tools/simulation/gz/models/standard_vtol
+COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds/
+COPY ../src/gazebo_assets/box /PX4-Autopilot/Tools/simulation/gz/models/box
+COPY ../src/gazebo_assets/apriltag /PX4-Autopilot/Tools/simulation/gz/models/apriltag
 
 WORKDIR /PX4-Autopilot
