@@ -186,7 +186,7 @@ class VehicleController(Node):
         """
         # todo
 
-    
+
 
     #============================================
     # Helper Functions
@@ -204,7 +204,60 @@ class VehicleController(Node):
                                             home_gps_pos[0], home_gps_pos[1], home_gps_pos[2])
             wp_position = np.array(wp_position)
             self.WP.append(wp_position)
+
+    def generate_bezier_curve(self, xi, xf, vmax):
+        # reset counter
+        self.bezier_counter = 0
+
+        # total time calculation
+        total_time = np.linalg.norm(xf - xi) / vmax * 2      # Assume that average velocity = vmax / 2.     real velocity is lower then vmax
+        if total_time <= self.bezier_minimum_time:
+            total_time = self.bezier_minimum_time
+
+        direction = np.array((xf - xi) / np.linalg.norm(xf - xi))
+        vf = self.mc_end_speed * direction
+        if np.linalg.norm(self.vel) < self.bezier_threshold_speed:
+            vi = self.mc_start_speed * direction
+        else:
+            vi = self.vel
+        self.bezier_counter = int(1 / self.time_period) - 1
+
+        point1 = xi
+        point2 = xi + vi * total_time / 3
+        point3 = xf - vf * total_time / 3
+        point4 = xf
+
+        # Bezier curve
+        self.num_bezier = int(total_time / self.time_period)
+        bezier = np.linspace(0, 1, self.num_bezier).reshape(-1, 1)
+        bezier = point4 * bezier**3 +                             \
+                3 * point3 * bezier**2 * (1 - bezier) +           \
+                3 * point2 * bezier**1 * (1 - bezier)**2 +        \
+                1 * point1 * (1 - bezier)**3
         
+        return bezier
+    
+    def run_bezier_curve(self, bezier_points, goal_yaw=None):
+        if goal_yaw is None:
+            goal_yaw = self.yaw
+        
+        if self.bezier_counter < self.num_bezier:
+            self.publish_trajectory_setpoint(
+                position_sp = bezier_points[self.bezier_counter],
+                yaw_sp = self.yaw + np.sign(np.sin(goal_yaw - self.yaw)) * self.yaw_speed
+            )
+            self.bezier_counter += 1
+        else:
+            self.publish_trajectory_setpoint(
+                position_sp = bezier_points[-1],        # last point (goal position)
+                yaw_sp = self.yaw + np.sign(np.sin(goal_yaw - self.yaw)) * self.yaw_speed
+            )
+
+    def get_braking_position(self, pos, vel):
+        braking_distance = (np.linalg.norm(vel))**2 / (2 * self.max_acceleration)
+        return pos + braking_distance * vel / np.linalg.norm(vel)
+
+
 
     #============================================
     # "Subscriber" Callback Functions
@@ -226,7 +279,9 @@ class VehicleController(Node):
     def vehicle_global_position_callback(self, msg):
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
-    
+
+
+
     #============================================
     # "Publisher" Callback Functions
     #============================================     
@@ -269,7 +324,8 @@ class VehicleController(Node):
         msg.yaw = kwargs.get("yaw_sp", float('nan'))
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
-    
+
+
     
     #============================================
     # "Timer" Callback Functions
@@ -291,28 +347,87 @@ class VehicleController(Node):
                     print("Arming...")
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
                 else:
-                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off, param7 = height
-                    self.set_home_local_position(self.pos_gps) # set home position & gps2local
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF) # Take off
+                    self.set_home_local_position(self.pos_gps) # set home position & convert wp gps -> local
             elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF:
                 print("Taking off...")
                 self.phase = 1
+                self.subphase = 'takeoff'
 
         if self.phase == 1:
-            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: # Take off -> Auto Loiter
-                self.publish_vehicle_command(
-                        VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 
-                        param1=1.0, # main mode
-                        param2=6.0  # offboard
-                    )
-            elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                """
-                TODO
-                """
-
+            if self.subphase == 'takeoff':
+                if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER: 
+                    # Take off -> Auto Loiter
+                    self.publish_vehicle_command(
+                            VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 
+                            param1=1.0, # main mode
+                            param2=6.0  # offboard
+                        )
+                elif self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                    self.subphase = 'generate_path'
+            
+            elif self.subphase == 'generate_path':
+                self.goal_position = self.WP[1]
+                self.bezier_points = self.generate_bezier_curve(self.pos, self.goal_position, self.slow_vmax)
+                self.subphase = 'run_path'
+                
+            elif self.subphase == 'run_path':
+                self.run_bezier_curve(self.bezier_points)
+                if np.linalg.norm(self.pos - self.goal_position) < self.mc_acceptance_radius:
+                    self.phase = 2
+                    self.subphase = 'generate_path'
+        
         if self.phase == 2:
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0) # 착륙
-            print("Mission complete")
-    
+            if self.subphase == 'generate_path':
+                self.goal_position = self.WP[2]
+                self.bezier_points = self.generate_bezier_curve(self.pos, self.goal_position, self.slow_vmax)
+                self.subphase = 'run_path'
+                
+            elif self.subphase == 'run_path':
+                self.run_bezier_curve(self.bezier_points)
+                if np.linalg.norm(self.pos - self.goal_position) < self.mc_acceptance_radius:
+                    self.phase = 3
+                    self.subphase = 'generate_path'
+        
+        if self.phase == 3:
+            if self.subphase == 'generate_path':
+                self.goal_position = self.WP[3]
+                self.bezier_points = self.generate_bezier_curve(self.pos, self.goal_position, self.slow_vmax)
+                self.subphase = 'run_path'
+                
+            elif self.subphase == 'run_path':
+                self.run_bezier_curve(self.bezier_points)
+                if np.linalg.norm(self.pos - self.goal_position) < self.mc_acceptance_radius:
+                    self.phase = 4
+                    self.subphase = 'generate_path'
+        
+        if self.phase == 4:
+            if self.subphase == 'generate_path':
+                self.goal_position = self.WP[4]
+                self.bezier_points = self.generate_bezier_curve(self.pos, self.goal_position, self.slow_vmax)
+                self.subphase = 'run_path'
+                
+            elif self.subphase == 'run_path':
+                self.run_bezier_curve(self.bezier_points)
+                if np.linalg.norm(self.pos - self.goal_position) < self.mc_acceptance_radius:
+                    self.phase = 5
+                    self.subphase = 'generate_path'
+
+        if self.phase == 5:
+            if self.subphase == 'generate_path':
+                self.goal_position = self.WP[1]
+                self.bezier_points = self.generate_bezier_curve(self.pos, self.goal_position, self.slow_vmax)
+                self.subphase = 'run_path'
+                
+            elif self.subphase == 'run_path':
+                self.run_bezier_curve(self.bezier_points)
+                if np.linalg.norm(self.pos - self.goal_position) < self.mc_acceptance_radius:
+                    self.subphase = 'landing'
+
+            elif self.subphase == 'landing':
+                self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=0.0) # 착륙
+                print("Mission complete")
+
 
 
 #============================================
@@ -327,6 +442,11 @@ def is_jetson():
     except FileNotFoundError:
         return False
 
+
+
+#============================================
+# Main
+#============================================
 
 def main(args = None):
     rclpy.init(args=args)
