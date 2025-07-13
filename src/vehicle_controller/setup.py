@@ -9,7 +9,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['package.xml'])
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -23,6 +23,7 @@ setup(
             'skeleton = vehicle_controller.skeleton_code:main',
             'mc_test_01 = vehicle_controller.mc_test_01_takeoff_landing:main',
             'mc_test_02 = vehicle_controller.mc_test_02_square:main',
+            'mc_test_03 = vehicle_controller.mc_test_03_bezier:main',
         ],
     },
 )
