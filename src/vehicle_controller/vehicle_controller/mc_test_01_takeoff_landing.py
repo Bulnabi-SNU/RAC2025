@@ -11,16 +11,10 @@ from px4_msgs.msg import VehicleStatus, VehicleCommand
 from vehicle_controller.px4_base import PX4BaseController
 
 
-class Test01Controller(PX4BaseController):
-    """
-    Simple mission controller that implements:
-    1. Takeoff
-    2. Hold position for a specified time
-    3. Land
-    """
+class MissionController(PX4BaseController):
     
     def __init__(self):
-        super().__init__('simple_mission_controller')
+        super().__init__('mc_test_01_takeoff_landing')
         
         # Mission parameters
         self.hold_time_seconds = 10.0
@@ -30,7 +24,7 @@ class Test01Controller(PX4BaseController):
         # State machine
         self.state = 'READY_TO_FLIGHT'
         
-        self.get_logger().info("Simple mission controller initialized")
+        self.get_logger().info("Mission Controller Test01 initialized")
     
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -100,7 +94,7 @@ class Test01Controller(PX4BaseController):
     
     def _handle_mission_complete(self):
         """Handle mission complete state"""
-        
+        pass
     
     def on_vehicle_status_update(self, msg):
         """Override to handle vehicle status updates"""
@@ -123,7 +117,7 @@ def main(args=None):
     rclpy.init(args=args)
     
     try:
-        controller = Test01Controller()
+        controller = MissionController()
         rclpy.spin(controller)
     except KeyboardInterrupt:
         print("Mission interrupted by user")

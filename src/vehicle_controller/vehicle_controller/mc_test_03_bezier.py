@@ -1,6 +1,6 @@
 """
-Square Navigation Mission Controller
-Implements a basic takeoff, waypoint nav, and land mission using the PX4BaseController
+Bezier Navigation Mission Controller
+Implements a basic takeoff, waypoint nav (with bezier curve generation), and land mission using the PX4BaseController
 """
 
 __author__ = "PresidentPlant"
@@ -9,6 +9,7 @@ __contact__ = ""
 import rclpy
 from px4_msgs.msg import VehicleStatus, VehicleCommand
 from vehicle_controller.px4_base import PX4BaseController
+from vehicle_controller.bezier_handler import BezierCurve
 
 import numpy as np
 import math
@@ -16,29 +17,32 @@ import math
 class MissionController(PX4BaseController):
     
     def __init__(self):
-        super().__init__('mc_test_02_square')
+        super().__init__('mc_test_03_bezier')
+    
+        self.num_wp = 4
+        self.WP = [[5,0,10],[5,5,10],[0,5,10],[0,0,10],]           # waypoints, local coordinates. 0~num_wp-15
+        self.gps_WP = [      # TODO: Convert GPS to local(NED) coords
+            [47.397191,   8.546472, 0.0],
+            [47.397191,   8.546672, 0.0],
+            [47.397391,   8.546672, 0.0],
+            [47.397391,   8.546472, 0.0] ]
         
-        # Mission parameters
-        self.square_points = [
-            np.array([0.0, 5.0, 0.0]),
-            np.array([5.0, 0.0, 0.0]),
-            np.array([0.0, -5.0, 0.0]),
-            np.array([-5.0, 0.0, 0.0])
-        ]
+
         self.start_position = None
         self.current_point_index = 0
-        self.arrival_radius = 1.0
 
-        self.speed = 2.0  # m/s
+        self.bezier_handler = BezierCurve(time_step=0.05)
 
+        self.vmax = 2.0  # m/s
+        self.arrival_radius = 0.5
 
-        self.offboard_control_mode_params['position'] = False
-        self.offboard_control_mode_params['velocity'] = True
+        self.offboard_control_mode_params['position'] = True
+        self.offboard_control_mode_params['velocity'] = False
 
         # State machine
         self.state = 'READY_TO_FLIGHT'
         
-        self.get_logger().info("Mission Controller Test02 initialized")
+        self.get_logger().info("Mission Controller Test03 initialized")
     
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -49,8 +53,8 @@ class MissionController(PX4BaseController):
         elif self.state == 'TAKEOFF':
             self._handle_takeoff()
         
-        elif self.state == 'SQUARE_NAV':
-            self._handle_square_nav()
+        elif self.state == 'BEZIER_NAV':
+            self._handle_bezier_nav()
         
         elif self.state == 'LANDING':
             self._handle_landing()
@@ -82,34 +86,43 @@ class MissionController(PX4BaseController):
     def _handle_takeoff(self):
         """Handle takeoff state"""
         if self.is_auto_loiter():
-            self.get_logger().info("Takeoff complete. Starting square navigation phase...")
+            self.get_logger().info("Takeoff complete. Starting bezir navigation phase...")
             self.set_offboard_mode()
-            self.state = 'SQUARE_NAV'
+            self.state = 'BEZIER_NAV'
     
-    def _handle_square_nav(self):
-        """Handle square navigation state"""
-        if self.current_point_index < len(self.square_points):
+    def _handle_bezier_nav(self):
+        """Handle bezir navigation state"""
+        if self.current_point_index < self.num_wp:
                 if self.start_position is None:
                     self.start_position = np.copy(self.pos)
+                    self.bezier_handler.generate_curve(
+                        start_pos=self.start_position,
+                        end_pos=self.WP[self.current_point_index],
+                        max_velocity=self.vmax,
+                        total_time=None
+                    )
+                    self.publish_setpoint(position_sp = self.bezier_handler.get_current_point()) 
 
-                
-                target = self.start_position + self.square_points[self.current_point_index]
-                
-                direction = target - self.pos
-                distance = np.linalg.norm(direction)
-
-                direction /= distance if distance > 0 else 1.0  # Avoid division by zero
+                distance = np.linalg.norm(self.bezier_handler.get_current_point() - self.pos)
 
                 if distance < self.arrival_radius:
-                    print(f"Reached point {self.current_point_index + 1}")
-                    self.current_point_index += 1
-                    self.start_position = None
-                else:
-                    yaw_sp = math.atan2(direction[1], direction[0])
-                    vel = self.speed * direction
-                    self.publish_setpoint(vel_sp=vel, yaw_sp=yaw_sp)
+                    if self.bezier_handler.get_next_point() is None:
+                        self.current_point_index += 1
+                        self.start_position = np.copy(self.pos)
+                        if self.current_point_index >= self.num_wp:
+                            self.get_logger().info("All waypoints reached. Landing...")
+                            self.state = 'LANDING'
+                            return
+                        self.get_logger().info("Waypoints reached. Moving to next waypoint")
+                        self.bezier_handler.generate_curve(
+                            start_pos=self.start_position,
+                            end_pos=self.WP[self.current_point_index],
+                            max_velocity=self.vmax,
+                            total_time=None
+                        )
+                    self.publish_setpoint(position_sp = self.bezier_handler.get_current_point()) 
         else:
-            print("Square flight complete. Landing...")
+            print("Bezier flight complete. Landing...")
             self.state = 'LANDING'
     
     def _handle_landing(self):
