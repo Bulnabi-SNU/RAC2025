@@ -65,6 +65,16 @@ class PX4BaseController(Node, ABC):
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_global_position = VehicleGlobalPosition()
         
+        self.offboard_control_mode_params = {
+            'position': True,
+            'velocity': False,
+            'acceleration': False,
+            'attitude': False,
+            'body_rate': False,
+            'thrust_and_torque': False,
+            'direct_actuator': False
+        }
+
         # Position, velocity, and yaw
         self.pos = np.array([0.0, 0.0, 0.0])        # local NED
         self.pos_gps = np.array([0.0, 0.0, 0.0])    # global GPS
@@ -131,7 +141,7 @@ class PX4BaseController(Node, ABC):
         self.last_heartbeat_time = now
         
         # Publish offboard control mode (can be overridden)
-        self.publish_offboard_control_mode(velocity=True)
+        self.publish_offboard_control_mode(**self.offboard_control_mode_params)
     
     def _main_timer_callback(self):
         """Main timer callback - calls the abstract main_loop method"""
@@ -223,6 +233,8 @@ class PX4BaseController(Node, ABC):
 
             return self.home_position
         
+        self.home_position_gps = np.array([lat2, lon2, alt2])
+
         lat1, lon1 = np.radians(lat1), np.radians(lon1)
         lat2, lon2 = np.radians(lat2), np.radians(lon2)
         
@@ -233,9 +245,8 @@ class PX4BaseController(Node, ABC):
         self.home_position = np.array([x_ned, y_ned, z_ned])
         
         self.get_logger().info(f"Home position set: {self.home_position}")
-        self.home_position_gps = np.array([lat2, lon2, alt2])
-
         self.get_logger().info(f"Global Home position set: {self.home_position_gps}")
+
         return self.home_position
     
     def publish_vehicle_command(self, command, **kwargs):
