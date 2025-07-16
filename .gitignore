@@ -2,3 +2,4 @@ log/
 build/
 install/
 __pycache__/
+.devcontainer.json

@@ -1,0 +1,60 @@
+FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Set locale
+RUN apt-get update && apt-get install -y locales && \
+    locale-gen en_US en_US.UTF-8 && \
+    update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+# Install GPU GUI/OpenGL related packages and PX4 dependencies
+RUN apt-get update && apt-get install -y \
+    mesa-utils \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libglu1-mesa \
+    x11-xserver-utils \
+    git lsb-release sudo wget
+
+# Clone PX4 repository
+RUN git clone https://github.com/PX4/PX4-Autopilot.git --recursive
+
+#
+# Misc. Setup
+#
+
+# Create a non-root user
+RUN useradd -m -s /bin/bash bulnabi && \
+    usermod -aG sudo bulnabi && \
+    echo "bulnabi ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R bulnabi:bulnabi /PX4-Autopilot 
+
+# Switch to non-root user
+USER bulnabi
+
+RUN bash ./PX4-Autopilot/Tools/setup/ubuntu.sh
+
+# Set up workspace
+WORKDIR /PX4-Autopilot
+
+RUN make -j$(nproc) px4_sitl
+
+# Set up xRCE-DDS
+
+WORKDIR /tmp/
+RUN git clone -b v2.4.2 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
+    sed -i '98s|2.12|2.13|' Micro-XRCE-DDS-Agent/CMakeLists.txt && \
+    sed -i '99s|2.12.x|2.13.3|' Micro-XRCE-DDS-Agent/CMakeLists.txt && \
+    cd Micro-XRCE-DDS-Agent && mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && sudo make install && sudo ldconfig /usr/local/lib/
+
+# Copy world/models
+COPY ../src/gazebo_assets/standard_vtol/ /PX4-Autopilot/Tools/simulation/gz/models/standard_vtol
+COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds/
+COPY ../src/gazebo_assets/box /PX4-Autopilot/Tools/simulation/gz/models/box
+COPY ../src/gazebo_assets/apriltag /PX4-Autopilot/Tools/simulation/gz/models/apriltag
+
+WORKDIR /PX4-Autopilot

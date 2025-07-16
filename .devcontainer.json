@@ -1,6 +1,6 @@
 {
   "name": "DevContainer",
-  "dockerComposeFile": "docker-compose.yml",
+  "dockerComposeFile": "docker-compose.intel.yml",
   "service": "ros2",
   "workspaceFolder": "/workspace",
   // "remoteUser": "bulnabi",

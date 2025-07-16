@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  gazebo:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.PX4_Gazebo.nvidia
+    container_name: rac2025_gazebo
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ./src/gazebo_assets:/gazebo_assets
+    devices:
+      - /dev/dri
+    network_mode: host
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  ros2:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.ROS2.nvidia
+    container_name: rac2025_ros2
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ./:/workspace
+    devices:
+      - /dev/dri
+    network_mode: host
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
