@@ -50,55 +50,57 @@ class BezierCurve:
         start_pos = np.array(start_pos)
         end_pos = np.array(end_pos)
 
-        # calculate direction
-        if np.linalg.norm(end_pos - start_pos) > 0: direction = (end_pos - start_pos)/ np.linalg.norm(end_pos - start_pos)
-        else: direction = np.zeros(3)
+        # calculate direction and distance
+        direction = end_pos - start_pos
+        distance = np.linalg.norm(direction)
+        if np.linalg.norm(direction) > 0:
+            direction_norm = direction/ distance
+        else: 
+            direction_norm = np.zeros(3)
 
-        if (start_vel is None) and (direction != np.zeros(3)):
-            start_vel = self.mc_start_speed * direction / np.linalg.norm(direction)
+        # set start/end velocity
+        if ((start_vel is None) or (np.linalg.norm(start_vel) < self.bezier_threshold_speed)) and (direction_norm != np.zeros(3)):
+            start_vel = self.mc_start_speed * direction_norm
         else:
             start_vel = np.array(start_vel)
         
-        if (end_vel is None) and (direction != np.zeros(3)):
-            end_vel = self.mc_end_speed * direction / np.linalg.norm(direction)
+        if (end_vel is None) and (direction_norm != np.zeros(3)):
+            end_vel = self.mc_end_speed * direction_norm
         else:
             end_vel = np.array(end_vel)
         
-
-
-
         # Calculate total time if not provided
         if total_time is None:
-            distance = np.linalg.norm(end_pos - start_pos)
-            total_time = max(distance / max_velocity, 1.0)  # Minimum 1 second
+            total_time = max(distance / max_velocity * 2, 1.0)  # Minimum 1 second
+        
+
+        #-------------------------------------
+        # compute bezier control points
+        #-------------------------------------
         
         # Number of points in trajectory
-        num_points = int(total_time / self.time_step)
+        self.num_trajectory_points = int(total_time / self.time_step)
         
-        # Control points for smooth curve
-        direction = end_pos - start_pos
-        control_offset = np.linalg.norm(direction) * 0.3  # 30% of distance
-        
-        if np.linalg.norm(direction) > 0:
-            direction = direction / np.linalg.norm(direction)
-        
+        # for maintain current velocity and match to differencial equation
+        control_offset = np.linalg.norm(direction) / 3.0
+
         # Bezier control points
-        p0 = start_pos                           # Start point
-        p1 = start_pos + direction * control_offset  # First control point
-        p2 = end_pos - direction * control_offset    # Second control point
-        p3 = end_pos                             # End point
-        
+        p0 = start_pos                              # Start point
+        p1 = start_pos + start_vel * control_offset # First control point
+        p2 = end_pos - end_vel * control_offset     # Second control point
+        p3 = end_pos                                # End point
+
         # Generate curve points
-        t_values = np.linspace(0, 1, num_points)
-        trajectory_points = []
+        bezier = np.linspace(0, 1, self.num_trajectory_points).reshape(-1, 1)
         
-        for t in t_values:
-            # Cubic Bezier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
-            point = (1-t)**3 * p0 + 3*(1-t)**2*t * p1 + 3*(1-t)*t**2 * p2 + t**3 * p3
-            trajectory_points.append(point)
+        bezier = p3 * bezier**3 +                             \
+                3 * p2 * bezier**2 * (1 - bezier) +           \
+                3 * p1 * bezier**1 * (1 - bezier)**2 +        \
+                1 * p0 * (1 - bezier)**3
         
-        self.trajectory_points = np.array(trajectory_points)
-        self.num_trajectory_points = len(trajectory_points)
+        self.trajectory_points = np.array(bezier)
+
+        # reset bezier index counter
         self.current_index = 0
         
         #return self.trajectory_points
