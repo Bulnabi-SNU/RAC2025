@@ -67,7 +67,7 @@
     
     <include>                       <!--Adding Box Model -->
       <uri>model://box</uri>
-      <pose>50 50 0 0 0 0</pose>
+      <pose>25 25 0.011 0 0 0</pose>
     </include>
     
     
