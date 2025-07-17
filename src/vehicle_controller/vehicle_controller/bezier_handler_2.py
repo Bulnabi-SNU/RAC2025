@@ -205,6 +205,10 @@ def main():
     ax.scatter(start[0], start[1], start[2], color='r', s=100, label='Start Position')
     ax.scatter(end[0], end[1], end[2], color='g', s=100, label='End Position')
 
+    # Plot vectors from start_pos and end_pos
+    ax.quiver(start[0], start[1], start[2], start_vel[0], start_vel[1], start_vel[2], color='r', length=0.5, label='Start Velocity')
+    ax.quiver(end[0], end[1], end[2], end_vel[0], end_vel[1], end_vel[2], color='r', length=0.5, label='End Velocity')
+
     # Labels and title
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
