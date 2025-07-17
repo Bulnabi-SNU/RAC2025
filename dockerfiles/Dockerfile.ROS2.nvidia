@@ -50,7 +50,7 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
    torchaudio \
    ultralytics \
    yolov5 \
-   numpy \
+   numpy==1.26.4 \
    scipy \
    scikit-learn \
    scikit-image \

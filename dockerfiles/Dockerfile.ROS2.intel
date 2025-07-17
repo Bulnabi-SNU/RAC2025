@@ -42,40 +42,40 @@ RUN apt-get install -y sudo vim git python3-pip python3-dev
 
 # Install python packages
 RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
-   # Computer Vision
-   opencv-python \
-   opencv-contrib-python \
-   # Machine Learning
-   torch \
-   torchvision \
-   torchaudio \
-   # YOLO and object detection
-   ultralytics \
-   yolov5 \
-   # Core scientific computing
-   numpy \
-   scipy \
-   scikit-learn \
-   scikit-image \
-   # Image processing
-   Pillow \
-   imageio \
-   albumentations \
-   imgaug \
-   # Data handling
-   pandas \
-   matplotlib \
-   # ML utilities
-   timm \
-   transformers \
-   tensorboard \
-   wandb \
-   # Utilities
-   pyyaml 
+    # Computer Vision
+    opencv-python \
+    opencv-contrib-python \
+    # Machine Learning
+    torch \
+    torchvision \
+    torchaudio \
+    # YOLO and object detection
+    ultralytics \
+    yolov5 \
+    # Core scientific computing
+    numpy==1.26.4 \
+    scipy \
+    scikit-learn \
+    scikit-image \
+    # Image processing
+    Pillow \
+    imageio \
+    albumentations \
+    imgaug \
+    # Data handling
+    pandas \
+    matplotlib \
+    # ML utilities
+    timm \
+    transformers \
+    tensorboard \
+    wandb \
+    # Utilities
+    pyyaml 
 
 # Install ROS2 packages
 RUN sudo curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
 
 RUN apt-get update -m && apt-get install -m -y  ros-humble-ros-gzharmonic
 
@@ -95,5 +95,5 @@ WORKDIR /workspace
 
 # Create setup script
 RUN echo '#!/bin/bash\n\
-source /opt/ros/humble/setup.bash\n \
-' > /home/bulnabi/.bashrc
+    source /opt/ros/humble/setup.bash\n \
+    ' > /home/bulnabi/.bashrc
