@@ -21,7 +21,7 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - capabilities: [ gpu ]
 
   ros2:
     build:
@@ -36,6 +36,11 @@ services:
       - ./:/workspace
     devices:
       - /dev/dri
+      - /dev/video0
+      - /dev/video1
+      - /dev/video2
+    group_add:
+      - video
     network_mode: host
     stdin_open: true
     tty: true
@@ -43,4 +48,4 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - capabilities: [ gpu ]
