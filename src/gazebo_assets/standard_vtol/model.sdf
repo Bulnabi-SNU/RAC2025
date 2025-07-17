@@ -619,7 +619,7 @@
 
    <include merge='true'>
       <uri>model://mono_cam</uri>
-      <pose>0 0 .10 0 1.5707 0</pose>
+       <pose>0 0 -0.03 0 1.5707 0</pose>  <!-- 이 z 위치가 vtol 중심으로부터 카메라의 상대적인 위치. 그러나 30cm 아래로 하면 바닥을 뚫고 내려가버린다. 일단은 -0.03로 설정 -->
       <name>mono_cam</name>
     </include>
     <joint name="CameraJoint" type="fixed">

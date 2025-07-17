@@ -1,0 +1,46 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="ground">
+    <static>true</static>
+    <link name="ground_link">
+      <pose>0 0 0 0 0 0</pose>
+
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>10 10</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode/>
+            </friction>
+            <bounce/>
+            <contact/>
+          </surface>
+        </collision>
+
+
+      <visual name="ground_visual">
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>100 100</size>
+          </plane>
+        </geometry>
+
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://ground/grass_texture.jpg</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+
+      </visual>
+    </link>
+  </model>
+</sdf>
