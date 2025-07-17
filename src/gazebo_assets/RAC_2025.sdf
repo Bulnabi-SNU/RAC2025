@@ -70,7 +70,10 @@
       <pose>25 25 0.011 0 0 0</pose>
     </include>
     
-    
+    <include>                       <!--Adding Red_Marker Model -->
+      <uri>model://red_marker</uri>
+      <pose>25 24 0.011 0 0 0</pose>
+    </include>
     
 
 <include>
