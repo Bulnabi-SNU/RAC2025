@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'target_detection_codes'
+package_name = 'vision_processing_nodes'
 
 setup(
     name=package_name,
@@ -20,8 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_publisher_node = target_detection_codes.camera_publisher_node:main',
-            'image_processing_node = target_detection_codes.image_processing_node:main',
+            'image_processing_node = vision_processing_nodes.image_processing_node:main',
+            'camera_publisher_node = vision_processing_nodes.camera_publisher_node:main',
         ],
     },
 )
