@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
     ultralytics \
     yolov5 \
     # Core scientific computing
-    numpy==1.26.4 \
+    numpy \
     scipy \
     scikit-learn \
     scikit-image \
