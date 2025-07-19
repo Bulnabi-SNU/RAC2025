@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LandingTagLocation.msg"
   "msg/TargetLocation.msg"
   "msg/VehiclePhase.msg"
+  "msg/DropTagLocation.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)
