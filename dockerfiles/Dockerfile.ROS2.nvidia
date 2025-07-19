@@ -64,7 +64,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
    transformers \
    tensorboard \
    wandb \
-   pyyaml 
+   pyyaml \
+   pymap3d
 
 # Install ROS2 packages
 RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
