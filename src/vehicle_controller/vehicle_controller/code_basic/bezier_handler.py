@@ -71,12 +71,12 @@ class BezierCurve:
             return
 
         # set start/end velocity
-        if ((start_vel is None) or (np.linalg.norm(start_vel) < self.bezier_threshold_speed)) and (direction_norm != np.zeros(3)):
+        if ((start_vel is None) or (np.linalg.norm(start_vel) < self.bezier_threshold_speed)) and (distance > 0):
             start_vel = self.mc_start_speed * direction_norm
         else:
             start_vel = np.array(start_vel)
         
-        if (end_vel is None) and (direction_norm != np.zeros(3)):
+        if (end_vel is None) and (distance > 0):
             end_vel = self.mc_end_speed * direction_norm
         else:
             end_vel = np.array(end_vel)
