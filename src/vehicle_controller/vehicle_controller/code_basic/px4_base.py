@@ -11,9 +11,12 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 # PX4 Messages
+"""msgs for subscription"""
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleLocalPosition
 from px4_msgs.msg import VehicleGlobalPosition
+from px4_msgs.msg import SensorGps # for log
+"""msgs for publishing"""
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import TrajectorySetpoint
@@ -21,6 +24,8 @@ from px4_msgs.msg import TrajectorySetpoint
 import os
 import numpy as np
 from abc import ABC, abstractmethod
+# gps
+import pymap3d as p3d
 
 
 class PX4BaseController(Node, ABC):
@@ -46,9 +51,12 @@ class PX4BaseController(Node, ABC):
         
         # Setup timers
         self._setup_timers()
-        
         self.get_logger().info(f"{node_name} initialized")
     
+    #=======================================
+    # Setup functions (__init__)
+    #=======================================
+
     def _setup_qos(self):
         """Configure QoS profile for publishing and subscribing"""
         self.qos_profile = QoSProfile(
@@ -83,9 +91,10 @@ class PX4BaseController(Node, ABC):
         
         # Home position
         self.get_position_flag = False
-        self.home_set = False
+        self.home_set_flag = False
         self.home_position = np.array([0.0, 0.0, 0.0])
         self.home_position_gps = np.array([0.0, 0.0, 0.0])
+        self.home_yaw = 0.0
         
         # Heartbeat timing
         self.last_heartbeat_time = None
@@ -131,6 +140,10 @@ class PX4BaseController(Node, ABC):
             self.time_period, self._main_timer_callback
         )
     
+    #=======================================
+    # Timer Callback functions
+    #=======================================
+
     def _offboard_heartbeat_callback(self):
         """Heartbeat callback to maintain offboard mode"""
         now = self.get_clock().now()
@@ -157,7 +170,11 @@ class PX4BaseController(Node, ABC):
         This is where the main control logic should go.
         """
         pass
-    
+
+    #=======================================
+    # Subscriber Callback functions
+    #=======================================
+
     def _vehicle_status_callback(self, msg):
         """Callback for vehicle status updates"""
         self.vehicle_status = msg
@@ -177,78 +194,13 @@ class PX4BaseController(Node, ABC):
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
         self.on_global_position_update(msg)
+        if self.get_position_flag and self.home_set_flag:
+            self.pos = self.pos - self.home_position
     
-    # Optional callback methods for subclasses to override
-    def on_vehicle_status_update(self, msg):
-        """Override this to handle vehicle status updates"""
-        pass
-    
-    def on_local_position_update(self, msg):
-        """Override this to handle local position updates"""
-        pass
-    
-    def on_global_position_update(self, msg):
-        """Override this to handle global position updates"""
-        pass
-    
-    def global_to_local(self, global_pos):
-        """Convert global GPS coordinates to local NED coordinates"""
-        if not self.get_position_flag:
-            self.get_logger().warn("Global position not set, cannot convert")
-            return np.nan * np.zeros(3)
-        if not self.home_set:
-            self.get_logger().warn("Home position not set, cannot convert")
-            return np.nan * np.zeros(3)
-        
-        R = 6371000.0
-        lat1, lon1, alt1 = np.radians(self.home_position)
-        lat2, lon2, alt2 = np.radians(global_pos)
-        x_ned = R * (lat2 - lat1)  # North
-        y_ned = R * (lon2 - lon1) * np.cos(lat1)  # East
-        z_ned = -(alt2 - alt1)  # Down 
-        return np.array([x_ned, y_ned, z_ned])
+    #=======================================
+    # Publisher Callback functions
+    #=======================================
 
-
-    def set_home_position(self):
-        
-        R = 6371000.0  # Earth radius in meters
-        self.home_set = True
-
-        try:
-            lat1 = float(os.environ.get('PX4_HOME_LAT', 0.0))
-            lon1 = float(os.environ.get('PX4_HOME_LON', 0.0))
-            alt1 = float(os.environ.get('PX4_HOME_ALT', 0.0))
-        except (ValueError, TypeError) as e:
-            self.get_logger().error(f"Error converting environment variables: {e}")
-            lat1, lon1, alt1 = 0.0, 0.0, 0.0
-        
-        lat2, lon2, alt2 = self.pos_gps
-        
-        if lat1 == 0.0 and lon1 == 0.0:
-            self.get_logger().warn("No home position in environment variables, using current position")
-            self.home_position = np.array([0.0, 0.0, 0.0])
-            self.home_position_gps = np.array([lat2, lon2, alt2])
-
-            self.get_logger().info(f"Global Home position set: {self.home_position_gps}")
-
-            return self.home_position
-        
-        self.home_position_gps = np.array([lat2, lon2, alt2])
-
-        lat1, lon1 = np.radians(lat1), np.radians(lon1)
-        lat2, lon2 = np.radians(lat2), np.radians(lon2)
-        
-        x_ned = R * (lat2 - lat1)  # North
-        y_ned = R * (lon2 - lon1) * np.cos(lat1)  # East
-        z_ned = -(alt2 - alt1)  # Down
-        
-        self.home_position = np.array([x_ned, y_ned, z_ned])
-        
-        self.get_logger().info(f"Home position set: {self.home_position}")
-        self.get_logger().info(f"Global Home position set: {self.home_position_gps}")
-
-        return self.home_position
-    
     def publish_vehicle_command(self, command, **kwargs):
         """Publish a vehicle command"""
         msg = VehicleCommand()
@@ -284,24 +236,51 @@ class PX4BaseController(Node, ABC):
     def publish_setpoint(self, **kwargs):
         """Publish trajectory setpoint (relative to home position)"""
         msg = TrajectorySetpoint()
-        msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)))
+        msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)) + self.home_position)
         msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
         msg.yaw = kwargs.get("yaw_sp", float('nan'))
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
+         
+    #=======================================
+    # Set Home position functions
+    #======================================= 
+
+    def set_home_position(self):
+        self.home_position = self.pos
+        self.home_position_gps = self.pos_gps
+        self.home_yaw = self.yaw
+        self.home_set_flag = True
     
-    def publish_local2global_setpoint(self, **kwargs):
-        """Publish setpoint converted from local to global coordinates"""
-        msg = TrajectorySetpoint()
-        local_setpoint = kwargs.get("pos_sp", np.nan * np.zeros(3))
-        global_setpoint = local_setpoint - self.home_position
-        msg.position = list(global_setpoint)
-        msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
-        msg.yaw = kwargs.get("yaw_sp", float('nan'))
-        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        self.trajectory_setpoint_publisher.publish(msg)
+    def set_gps_to_local(self, num_wp, gps_WP, home_gps_pos):
+        """
+        Convert GPS waypoints to local coordinates relative to home position.
+        input: num_wp, gps_WP, home_gps_pos
+        output: local_wp array
+        """
+        # home_gps_pos = currunt self.pos
+        if self.home_set_flag:
+            # convert GPS waypoints to local coordinates relative to home position
+            local_wp = []
+            for i in range(0,num_wp):
+                # gps_WP = [lat, lon, rel_alt]
+                wp_position = p3d.geodetic2ned(self.gps_WP[i][0], self.gps_WP[i][1], self.gps_WP[i][2] + home_gps_pos[2],
+                                                home_gps_pos[0], home_gps_pos[1], home_gps_pos[2])
+                wp_position = np.array(wp_position)
+                local_wp.append(wp_position)
+                return local_wp
+        else:
+            self.get_logger().error("Home position not set. Cannot convert GPS to local coordinates.")
+            return None
+
     
+    #=======================================
     # Utility methods
+    # check & change vehicle status
+    #=======================================
+    
+    # check
+
     def is_armed(self):
         """Check if vehicle is armed"""
         return self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED
@@ -313,6 +292,10 @@ class PX4BaseController(Node, ABC):
     def is_offboard_mode(self):
         """Check if vehicle is in offboard mode"""
         return self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD
+
+    def is_mission_mode(self):
+            """Check if vehicle is in mission mode"""
+            return self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_MISSION
     
     def is_auto_takeoff(self):
         """Check if vehicle is in auto takeoff mode"""
@@ -322,6 +305,8 @@ class PX4BaseController(Node, ABC):
         """Check if vehicle is in auto loiter mode"""
         return self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER
     
+    # publish
+     
     def arm(self):
         """Arm the vehicle"""
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
@@ -333,7 +318,14 @@ class PX4BaseController(Node, ABC):
     def set_offboard_mode(self):
         """Set vehicle to offboard mode"""
         if not self.is_offboard_mode():
+            # 1:main mode, 2:mode=offboard
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
+
+    def set_mission_mode(self):
+        """Set vehicle to mission mode"""
+        if not self.is_mission_mode():
+            # 1:main mode, 2:mode=mission
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=4.0, param3=4.0)
 
     def takeoff(self, altitude=None):
         """Command takeoff"""

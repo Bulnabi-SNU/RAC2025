@@ -4,8 +4,8 @@ __contact__ = ""
 # import rclpy: ros library
 import rclpy
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from vehicle_controller.code_basic.px4_base_2 import PX4BaseController
-from vehicle_controller.code_basic.bezier_handler_2 import BezierCurve
+from vehicle_controller.vehicle_controller.code_basic.px4_base import PX4BaseController
+from vehicle_controller.vehicle_controller.code_basic.bezier_handler import BezierCurve
 
 # import px4_msgs
 from px4_msgs.msg import VehicleStatus, VehicleCommand, VehicleGlobalPosition
