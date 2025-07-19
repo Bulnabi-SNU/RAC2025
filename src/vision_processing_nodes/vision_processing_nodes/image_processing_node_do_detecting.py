@@ -134,7 +134,11 @@ class ImageProcessor(Node):
         if self.phase is None:
             return  # Skip processing if phase is not defined
         detection = self.detect_landing_tag(self.last_image)
-        if not detection:
+        if detection[0] == -1:
+            print("No apriltags detected")
+            return
+        if detection[0] == -2:
+            print("Pose estimation failed")
             return
         x, y, z, yaw, height = detection
         pos_msg = LandingTagLocation()
@@ -144,7 +148,7 @@ class ImageProcessor(Node):
         pos_msg.yaw = yaw                               # angle deviation away from proper alignment 
         pos_msg.height = height                         # height of the vehicle if probably not necessary here
         self.landing_pub.publish(pos_msg)
-        self.get_logger().info(f"Publishing landing tag location: x={x:.2f}, y={y:.2f}")
+        self.get_logger().info(f"Publishing landing tag location: x={x:.2f}, y={y:.2f}, z={z:.2f}, yaw={yaw:.2f},height={height:.2f}")
 
     def publish_target_location(self):
         if self.phase is None:
@@ -211,15 +215,59 @@ class ImageProcessor(Node):
     #============================================
 
     def detect_landing_tag(self, image): #to-do
-        # --- Used for Auto-Landing using AprilTag Markers ---
-        # Replace with your algorithm (e.g., ArUco, color blob, YOLO, etc.)
-        height, width, _ = image.shape
+        # Opencv aruco settings for apriltag detection
+        dictionary   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
+        det_params   = cv2.aruco.DetectorParameters()
+        detector     = cv2.aruco.ArucoDetector(dictionary, det_params)
 
-        # Simulated center
-        cx, cy = width // 2, height // 2
+        # Gray scale conversion
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Fake data (replace this with real detection outputs)
-        return (0.1, -0.05, 0.0, 0.0, 1.2)  # x, y, z, yaw, height
+        # 태그 검출
+        corners, ids, rejected = detector.detectMarkers(gray_image)
+        if ids is None or len(ids) == 0:
+            return np.array([-1,0,0,0,0]) # detection fail, return -1
+        
+        # 일단 그냥 첫번째 태그 사용, 나중에 위에처럼 수정
+        img_pts = corners[0].reshape(-1, 2).astype(np.float32)  # (4,2)
+
+        # solvePnP용 3D 좌표계 정의 (april_tag 좌표게 만드는 코드)
+        s = self.tag_size / 2.0
+        obj_pts = np.array([[-s,  s, 0],
+                            [ s,  s, 0],
+                            [ s, -s, 0],
+                            [-s, -s, 0]], dtype=np.float32)
+        
+        """
+        Solve PnP - 여기서 camera intrinsics and distortion 고려
+        success - 성공 여부에 대한 Boolean
+        rvec - rotation vector (단위)
+        tvec - transformation vector
+        """
+        success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts,
+                                        self.K, self.D,
+                                        flags=cv2.SOLVEPNP_ITERATIVE)
+        if not success:
+            return np.array([-2,0,0,0,0]) # pose estimate fail, return -2
+
+        # Compute Rotation matrix and its inverse for camera position calculation
+        R, _ = cv2.Rodrigues(rvec)
+        T = tvec                        # T vector renamed for 통일
+
+        # Calculate camera position - https://darkpgmr.tistory.com/122 math behind these calculations, https://m.blog.naver.com/jewdsa813/222210464716 for code
+        tag_pose_camera_frame = (-np.linalg.inv(R)@T).flatten()
+        
+        # Calculate yaw
+        unit_z_tag_frame = np.array([0.,0.,1.])
+        unit_z_camera_frame = np.linalg.inv(R)@unit_z_tag_frame         # No need to consider transformation in this case (only consider rotation)
+        yaw = np.arctan2(unit_z_camera_frame[1],unit_z_camera_frame[0]) - np.pi/2
+
+        # Return values
+        x = tag_pose_camera_frame[0]
+        y = tag_pose_camera_frame[1]
+        z = tag_pose_camera_frame[2]
+
+        return np.array([x,y,z,yaw,z])
 
 
     def detect_target(self, image): #to-do
