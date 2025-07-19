@@ -75,9 +75,9 @@
     
 
 <include>
-  <name>ground</name>
+  <name>ground_grass</name>
   <uri>model://ground</uri>
-  <pose>0 0 0.01 0 0 0</pose>
+  <pose>0 0 0 0 0 0</pose>
 </include>
     
   </world>

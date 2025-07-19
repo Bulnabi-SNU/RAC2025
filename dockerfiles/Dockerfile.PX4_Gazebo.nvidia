@@ -57,7 +57,7 @@ COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds
 COPY ../src/gazebo_assets/box /PX4-Autopilot/Tools/simulation/gz/models/box
 COPY ../src/gazebo_assets/apriltag /PX4-Autopilot/Tools/simulation/gz/models/apriltag
 COPY ../src/gazebo_assets/ground /PX4-Autopilot/Tools/simulation/gz/models/ground
-COPY ../src/gazebo_assets/ground /PX4-Autopilot/Tools/simulation/gz/models/red_marker
+COPY ../src/gazebo_assets/red_marker /PX4-Autopilot/Tools/simulation/gz/models/red_marker
 
 
 WORKDIR /PX4-Autopilot
