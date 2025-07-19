@@ -92,15 +92,12 @@ class BezierCurve:
         
         # Number of points in trajectory
         self.num_trajectory_points = int(total_time / self.time_step)
-        
-        # for maintain current velocity and match to differencial equation
-        control_offset = np.linalg.norm(direction) / 3.0
 
         # Bezier control points
-        p0 = start_pos                              # Start point
-        p1 = start_pos + start_vel * control_offset # First control point
-        p2 = end_pos - end_vel * control_offset     # Second control point
-        p3 = end_pos                                # End point
+        p0 = start_pos                                  # Start point
+        p1 = start_pos + start_vel * total_time / 3.0   # First control point
+        p2 = end_pos - end_vel * total_time / 3.0       # Second control point
+        p3 = end_pos                                    # End point
 
         # Generate curve points
         bezier = np.linspace(0, 1, self.num_trajectory_points).reshape(-1, 1)

@@ -236,8 +236,8 @@ class PX4BaseController(Node, ABC):
     def publish_setpoint(self, **kwargs):
         """Publish trajectory setpoint (relative to home position)"""
         msg = TrajectorySetpoint()
-        msg.position = list(kwargs.get("pos_sp", np.nan * np.zeros(3)) + self.home_position)
-        msg.velocity = list(kwargs.get("vel_sp", np.nan * np.zeros(3)))
+        msg.position = list( kwargs.get("pos_sp", np.nan * np.zeros(3)) + self.home_position )
+        msg.velocity = list( kwargs.get("vel_sp", np.nan * np.zeros(3)) )
         msg.yaw = kwargs.get("yaw_sp", float('nan'))
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)

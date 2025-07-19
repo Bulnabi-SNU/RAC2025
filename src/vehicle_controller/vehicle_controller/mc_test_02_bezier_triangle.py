@@ -122,14 +122,10 @@ class MissionController(PX4BaseController):
                         total_time=None
                     )
                 
-            self.publish_setpoint(position_sp = self.bezier_handler.get_current_point()) 
-            print(self.bezier_handler.get_current_point())
+            self.publish_setpoint(pos_sp = self.bezier_handler.get_current_point())
             distance = np.linalg.norm(self.end_position - self.pos)
-            print(distance)
 
             if distance < self.mc_arrival_radius:
-                self.state = 'LANDING'
-                """
                 self.current_point_index += 1
                 self.bezier_flag = False
                 if self.current_point_index >= self.num_wp:
@@ -137,7 +133,7 @@ class MissionController(PX4BaseController):
                     self.state = 'LANDING'
                     return
                 self.get_logger().info("Waypoints reached. Moving to next waypoint")
-                """
+
         else:
             print("Bezier flight complete. Landing...")
             self.state = 'LANDING'
