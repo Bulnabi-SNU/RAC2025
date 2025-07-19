@@ -22,12 +22,15 @@ class MissionController(PX4BaseController):
         super().__init__('mc_test_02_bezier_triangle')
     
         self.num_wp = 4
-        self.WP = []           # waypoints, local coordinates.
+        self.WP = [np.array([0.0, 0.0, -5.0]), 
+                   np.array([0.0, 5.0, -5.0]),
+                   np.array([5.0, 0.0, -5.0]),
+                   np.array([0.0, 0.0, -5.0])]           # waypoints, local coordinates.
         self.gps_WP = [      # TODO: Convert GPS to local(NED) coords
-            [37.455914, 126.954218, 0.0],       # 1 (home)
-            [37.456108, 126.954093, 0.0],       # 2
-            [37.456110, 126.954329, 0.0],       # 3
-            [37.455914, 126.954218, 0.0] ]      # 1 (home)
+            [37.455914, 126.954218, 5.0],       # 1 (home)
+            [37.456108, 126.954093, 5.0],       # 2
+            [37.456110, 126.954329, 5.0],       # 3
+            [37.455914, 126.954218, 5.0] ]      # 1 (home)
 
         self.bezier_flag = False
         self.start_position = None
@@ -107,6 +110,7 @@ class MissionController(PX4BaseController):
         if self.current_point_index < self.num_wp:
             if self.bezier_flag is False:
                 # generate bezier curve just once per WP
+                self.bezier_flag = True
                 self.start_position = np.copy(self.pos)
                 self.end_position = self.WP[self.current_point_index]
                 self.bezier_handler.generate_curve(
@@ -118,18 +122,22 @@ class MissionController(PX4BaseController):
                         total_time=None
                     )
                 
-                self.publish_setpoint(position_sp = self.bezier_handler.get_current_point()) 
-                distance = np.linalg.norm(self.end_position - self.pos)
+            self.publish_setpoint(position_sp = self.bezier_handler.get_current_point()) 
+            print(self.bezier_handler.get_current_point())
+            distance = np.linalg.norm(self.end_position - self.pos)
+            print(distance)
 
-                if distance < self.mc_arrival_radius:
-                    self.get_logger().info("4")
-                    self.current_point_index += 1
-                    self.bezier_flag = False
-                    if self.current_point_index >= self.num_wp:
-                        self.get_logger().info("All waypoints reached. Landing...")
-                        self.state = 'LANDING'
-                        return
-                    self.get_logger().info("Waypoints reached. Moving to next waypoint")
+            if distance < self.mc_arrival_radius:
+                self.state = 'LANDING'
+                """
+                self.current_point_index += 1
+                self.bezier_flag = False
+                if self.current_point_index >= self.num_wp:
+                    self.get_logger().info("All waypoints reached. Landing...")
+                    self.state = 'LANDING'
+                    return
+                self.get_logger().info("Waypoints reached. Moving to next waypoint")
+                """
         else:
             print("Bezier flight complete. Landing...")
             self.state = 'LANDING'

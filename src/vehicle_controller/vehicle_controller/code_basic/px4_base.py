@@ -268,7 +268,7 @@ class PX4BaseController(Node, ABC):
                                                 home_gps_pos[0], home_gps_pos[1], home_gps_pos[2])
                 wp_position = np.array(wp_position)
                 local_wp.append(wp_position)
-                return local_wp
+            return local_wp
         else:
             self.get_logger().error("Home position not set. Cannot convert GPS to local coordinates.")
             return None
