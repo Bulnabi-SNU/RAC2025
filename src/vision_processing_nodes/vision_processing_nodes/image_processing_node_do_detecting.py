@@ -52,12 +52,15 @@ class ImageProcessor(Node):
         # Lines for System Initialization
         #self.phase = None
 
-        '''Use temporarily while no phase publisher exists'''
-        self.phase = VehiclePhase()
-        self.phase.do_detecting = True  # Force target detection mode
-        self.phase.do_landing = False   # Make sure landing is off
+        """ for VehiclePhase callback"""
+        self.vehicle_state = None
+        self.vehicle_phase = None
+        self.vehicle_subphase = None
+        self.do_landing = False
+        self.do_detecting = True
+        self.do_drop = False
 
-        # HagiTag 감지 관련 변수
+        """ drop tag """
         self.hagi_tag_detected = False
         self.hagi_tag_center = None
         self.hagi_tag_confidence = 0.0
@@ -73,7 +76,7 @@ class ImageProcessor(Node):
         # [Subscribers]
         # 1. VehiclePhase           : current phase of vehicle (ex. do_landing, do_detecting)
         # 2. CameraRawImage         : Raw Image received from the Camera
-        self.vehicle_phase_subscriber = self.create_subscription(VehiclePhase, '/phase', self.phase_callback, qos_profile)
+        self.vehicle_phase_subscriber = self.create_subscription(VehiclePhase, '/vehicle_phase', self.phase_callback, qos_profile)
         self.camera_image_subscriber = self.create_subscription(Image, self.topicNameFrames, self.image_callback, qos_profile)
 
         # [Publishers]
@@ -84,6 +87,26 @@ class ImageProcessor(Node):
         self.target_pub = self.create_publisher(TargetLocation, '/target_position', qos_profile)
         self.drop_tag_pub = self.create_publisher(DropTagLocation, '/drop_tag_position', qos_profile)
 
+        # [Timers]
+        timer_period = 0.05
+        self.main_timer = self.create_timer(timer_period, self.main_timer_callback)
+
+
+
+    #============================================
+    # "Timer" Callback Functions
+    #============================================     
+
+    def main_timer_callback(self):
+        if self.do_landing:
+            self.publish_landing_tag_location()
+
+        if self.do_detecting:
+            self.publish_target_location()
+            
+        if self.do_drop:
+            # HagiTag 감지 및 중심으로 이동
+            self.detect_and_track_hagi_tag()
 
 
     #============================================
@@ -92,19 +115,16 @@ class ImageProcessor(Node):
         
     def phase_callback(self, msg):
         self.phase = msg
+        self.vehicle_state = msg.vehicle_state
+        self.vehicle_phase = msg.vehicle_phase
+        self.vehicle_subphase = msg.vehicle_subphase
+        self.do_landing = msg.do_landing
+        self.do_detecting = msg.do_detecting
+        self.do_drop = msg.do_drop
 
     def image_callback(self, msg):
         self.last_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        if self.phase is None:
-            return  # Skip processing if phase is not defined
-        detection = None
-        if self.phase.do_landing:
-            self.publish_landing_tag_location()
-        elif self.phase.do_detecting:
-            # HagiTag 감지 및 중심으로 이동
-            self.detect_and_track_hagi_tag()
 
-    
 
     #============================================
     # "Publisher" Callback Functions
@@ -125,7 +145,6 @@ class ImageProcessor(Node):
         pos_msg.height = height                         # height of the vehicle if probably not necessary here
         self.landing_pub.publish(pos_msg)
         self.get_logger().info(f"Publishing landing tag location: x={x:.2f}, y={y:.2f}")
-
 
     def publish_target_location(self):
         if self.phase is None:
