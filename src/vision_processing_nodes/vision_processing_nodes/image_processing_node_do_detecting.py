@@ -21,7 +21,7 @@ from custom_msgs.msg import VehiclePhase
 '''msgs for publishing positions'''
 from custom_msgs.msg import LandingTagLocation  
 from custom_msgs.msg import TargetLocation  
-from custom_msgs.msg import DropTagLocation  # HagiTag 위치 정보용
+from custom_msgs.msg import DropTagLocation  # DropTag 위치 정보용
 
 # import other libraries
 import os, math
@@ -61,9 +61,9 @@ class ImageProcessor(Node):
         self.do_drop = False
 
         """ drop tag """
-        self.hagi_tag_detected = False
-        self.hagi_tag_center = None
-        self.hagi_tag_confidence = 0.0
+        self.drop_tag_detected = False
+        self.drop_tag_center = None
+        self.drop_tag_confidence = 0.0
 
         self.bridge = CvBridge()
         self.topicNameFrames ='topic_camera_image'
@@ -82,7 +82,7 @@ class ImageProcessor(Node):
         # [Publishers]
         # 1. LandingTagLocation      : publish the landing tag location
         # 2. TargetLocation          : publish the target location
-        # 3. DropTagLocation         : publish the HagiTag location (드론 위치 기준 상대 좌표)
+        # 3. DropTagLocation         : publish the DropTag location (드론 위치 기준 상대 좌표)
         self.landing_pub = self.create_publisher(LandingTagLocation, '/landing_tag_position', qos_profile)
         self.target_pub = self.create_publisher(TargetLocation, '/target_position', qos_profile)
         self.drop_tag_pub = self.create_publisher(DropTagLocation, '/drop_tag_position', qos_profile)
@@ -105,8 +105,8 @@ class ImageProcessor(Node):
             self.publish_target_location()
             
         if self.do_drop:
-            # HagiTag 감지 및 중심으로 이동
-            self.detect_and_track_hagi_tag()
+            # DropTag 감지 및 중심으로 이동
+            self.detect_and_track_drop_tag()
 
 
     #============================================
@@ -166,19 +166,19 @@ class ImageProcessor(Node):
         self.target_pub.publish(pos_msg)
         self.get_logger().info(f"Publishing target location: x={x:.2f}, y={y:.2f}")
 
-    def detect_and_track_hagi_tag(self):
-        """HagiTag를 감지하고 중심으로 이동하는 메인 함수"""
+    def detect_and_track_drop_tag(self):
+        """DropTag를 감지하고 중심으로 이동하는 메인 함수"""
         if self.last_image is None:
             return
             
-        # HagiTag 감지
-        detection_result = self.detect_hagi_tag(self.last_image)
+        # DropTag 감지
+        detection_result = self.detect_drop_tag(self.last_image)
         
         if detection_result is not None:
             tag_center, confidence, distance = detection_result
-            self.hagi_tag_detected = True
-            self.hagi_tag_center = tag_center
-            self.hagi_tag_confidence = confidence
+            self.drop_tag_detected = True
+            self.drop_tag_center = tag_center
+            self.drop_tag_confidence = confidence
             
             # 화면 중심으로부터의 상대 위치 계산
             h, w = self.last_image.shape[:2]
@@ -201,11 +201,11 @@ class ImageProcessor(Node):
             pos_msg.height = 0.0    # 필요시 계산
             
             self.drop_tag_pub.publish(pos_msg)
-            self.get_logger().info(f"HagiTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), Confidence: {confidence:.2f}")
+            self.get_logger().info(f"DropTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), Confidence: {confidence:.2f}")
             
         else:
-            self.hagi_tag_detected = False
-            self.get_logger().info("HagiTag not detected")
+            self.drop_tag_detected = False
+            self.get_logger().info("DropTag not detected")
 
 
 
@@ -281,9 +281,9 @@ class ImageProcessor(Node):
         # Fake data (replace this with real detection outputs)
         return (0.1, -0.05, 0.0, 0.0, 1.2)  # x, y, z, yaw, height
 
-    def detect_hagi_tag(self, image):
+    def detect_drop_tag(self, image):
         """
-        HagiTag 감지 함수 (HagiTagDetection_RedHsv.py 기반)
+        DropTag 감지 함수 (DropTagDetection_RedHsv.py 기반)
         Returns: (tag_center, confidence, distance) or None
         """
         # HSV 색상 범위 (빨간색)
