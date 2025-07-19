@@ -22,9 +22,7 @@ setup(
         'console_scripts': [
             'skeleton = vehicle_controller.skeleton_code:main',
             'mc_test_01 = vehicle_controller.mc_test_01_takeoff_landing:main',
-            'mc_test_02 = vehicle_controller.mc_test_02_square:main',
-            'mc_test_03 = vehicle_controller.mc_test_03_bezier:main',
-            'image_detector = vehicle_controller.image_detector:main',
+            'mc_test_02 = vehicle_controller.mc_test_02_bezier_triangle:main',
         ],
     },
 )

@@ -91,7 +91,7 @@ class PX4BaseController(Node, ABC):
         
         # Home position
         self.get_position_flag = False
-        self.home_set = False
+        self.home_set_flag = False
         self.home_position = np.array([0.0, 0.0, 0.0])
         self.home_position_gps = np.array([0.0, 0.0, 0.0])
         self.home_yaw = 0.0
@@ -194,6 +194,8 @@ class PX4BaseController(Node, ABC):
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
         self.on_global_position_update(msg)
+        if self.get_position_flag and self.home_set_flag:
+            self.pos = self.pos - self.home_position
     
     #=======================================
     # Publisher Callback functions
@@ -248,19 +250,25 @@ class PX4BaseController(Node, ABC):
         self.home_position = self.pos
         self.home_position_gps = self.pos_gps
         self.home_yaw = self.yaw
-        self.home_set = True
+        self.home_set_flag = True
     
     def set_gps_to_local(self, num_wp, gps_WP, home_gps_pos):
+        """
+        Convert GPS waypoints to local coordinates relative to home position.
+        input: num_wp, gps_WP, home_gps_pos
+        output: local_wp array
+        """
         # home_gps_pos = currunt self.pos
-        if self.home_set:
+        if self.home_set_flag:
             # convert GPS waypoints to local coordinates relative to home position
             local_wp = []
-            for i in range(len(num_wp)):
+            for i in range(0,num_wp):
                 # gps_WP = [lat, lon, rel_alt]
                 wp_position = p3d.geodetic2ned(self.gps_WP[i][0], self.gps_WP[i][1], self.gps_WP[i][2] + home_gps_pos[2],
                                                 home_gps_pos[0], home_gps_pos[1], home_gps_pos[2])
                 wp_position = np.array(wp_position)
                 local_wp.append(wp_position)
+                return local_wp
         else:
             self.get_logger().error("Home position not set. Cannot convert GPS to local coordinates.")
             return None

@@ -69,12 +69,12 @@ class BezierCurve:
             direction_norm = np.zeros(3)
 
         # set start/end velocity
-        if ((start_vel is None) or (np.linalg.norm(start_vel) < self.bezier_threshold_speed)) and (direction_norm != np.zeros(3)):
+        if ((np.linalg.norm(start_vel) < self.bezier_threshold_speed)) and (direction_norm != np.zeros(3)):
             start_vel = self.mc_start_speed * direction_norm
         else:
             start_vel = np.array(start_vel)
         
-        if (end_vel is None) and (direction_norm != np.zeros(3)):
+        if (direction_norm != np.zeros(3)):
             end_vel = self.mc_end_speed * direction_norm
         else:
             end_vel = np.array(end_vel)
@@ -166,6 +166,36 @@ class BezierCurve:
         
         return point
 
+    def get_current_index(self):
+        """
+        Get the current index of trajectory points
+        
+        Returns:
+            Current index of trajectory points
+        """
+        return self.current_index
+    
+    def get_num_trajectory_points(self):
+        """
+        Get the total number of trajectory points
+        
+        Returns:
+            Total number of trajectory points
+        """
+        return self.num_trajectory_points
+    
+    def get_trajectory_points_list(self):
+        """
+        Get the trajectory points as a list
+        
+        Returns:
+            List of trajectory points or None if not generated
+        """
+        if self.trajectory_points is None:
+            return None
+        
+        return self.trajectory_points.tolist()
+    
     def is_complete(self):
         """
         Check if trajectory is complete
