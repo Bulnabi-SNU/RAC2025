@@ -68,6 +68,8 @@ class ImageProcessor(Node):
         self.drop_tag_detected = False
         self.drop_tag_center = None
         self.drop_tag_confidence = 0.0
+        # DropTag 일시정지 상태 관리
+        self.drop_tag_paused = False
 
         self.bridge = CvBridge()
         self.topicNameFrames ='topic_camera_image'
@@ -292,6 +294,28 @@ class ImageProcessor(Node):
         if self.last_image is None:
             return
             
+      
+        # 1) 전체 이미지 빨간 비율 계산 (0.4 기준으로 일시정지/재개)
+        hsv_tmp = cv2.cvtColor(self.last_image, cv2.COLOR_BGR2HSV)
+        m1_tmp = cv2.inRange(hsv_tmp, lower_red1, upper_red1)
+        m2_tmp = cv2.inRange(hsv_tmp, lower_red2, upper_red2)
+        mask_tmp = cv2.bitwise_or(m1_tmp, m2_tmp)
+        red_ratio = cv2.countNonZero(mask_tmp) / mask_tmp.size
+        h, w = self.last_image.shape[:2]
+        screen_center = (w // 2, h // 2)
+        if red_ratio > 0.4:
+            # 비율 높으면 일시정지 후 화면 중앙 좌표 출력
+            if not self.drop_tag_paused:
+                self.drop_tag_paused = True
+                self.get_logger().info(f"DropTag detection paused. Center: {screen_center}")
+            return
+        else:
+            # 비율 낮아지면 재개 알림
+            if self.drop_tag_paused:
+                self.drop_tag_paused = False
+                self.get_logger().info("DropTag detection resumed.")
+     
+
         # DropTag 감지
         detection_result = self.detect_drop_tag(self.last_image)
         
