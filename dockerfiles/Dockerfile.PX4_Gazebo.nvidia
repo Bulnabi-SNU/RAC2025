@@ -56,3 +56,9 @@ COPY ../src/gazebo_assets/ /tmp/gazebo_assets/
 RUN rsync -av --exclude='RAC_2025.sdf' /tmp/gazebo_assets/ /PX4-Autopilot/Tools/simulation/gz/models/
 
 WORKDIR /PX4-Autopilot
+
+# Create setup script
+RUN echo '#!/bin/bash\n\
+    alias gazebo="PX4_SYS_AUTOSTART=4004 PX4_SIM_MODEL=standard_vtol PX4_GZ_WORLD=RAC_2025 ./build/px4_sitl_default/bin/px4"\n \
+    alias dds="MicroXRCEAgent udp4 -p 8888"\n \
+    ' > /home/bulnabi/.bashrc

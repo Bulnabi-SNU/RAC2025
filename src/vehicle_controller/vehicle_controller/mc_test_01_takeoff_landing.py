@@ -8,7 +8,7 @@ __contact__ = ""
 
 import rclpy
 from px4_msgs.msg import VehicleStatus, VehicleCommand
-from vehicle_controller.px4_base import PX4BaseController
+from vehicle_controller.code_basic.px4_base import PX4BaseController
 
 
 class MissionController(PX4BaseController):

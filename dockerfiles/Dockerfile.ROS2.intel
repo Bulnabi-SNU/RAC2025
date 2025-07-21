@@ -97,4 +97,6 @@ WORKDIR /workspace
 # Create setup script
 RUN echo '#!/bin/bash\n\
     source /opt/ros/humble/setup.bash\n \
+    alias build="colcon build --symlink-install"\n \
+    alias ros="source ./install/setup.bash"\n \
     ' > /home/bulnabi/.bashrc
