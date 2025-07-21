@@ -51,6 +51,4 @@ RUN cd Micro-XRCE-DDS-Agent && \
 COPY ../src/gazebo_assets/ /tmp/gazebo_assets/
 RUN rsync -av --exclude='RAC_2025.sdf' /tmp/gazebo_assets/ /PX4-Autopilot/Tools/simulation/gz/models/
 
-COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds/
-
 WORKDIR /PX4-Autopilot

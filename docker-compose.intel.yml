@@ -12,6 +12,7 @@ services:
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
       - ./src/gazebo_assets:/gazebo_assets
+      - ./src/gazebo_assets/RAC_2025.sdf:/PX4-Autopilot/Tools/simulation/gz/worlds/RAC_2025.sdf
     devices:
       - /dev/dri
     network_mode: host
