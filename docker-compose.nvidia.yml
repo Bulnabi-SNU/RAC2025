@@ -9,6 +9,8 @@ services:
     privileged: true
     environment:
       - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
       - ./src/gazebo_assets:/gazebo_assets
@@ -32,6 +34,8 @@ services:
     privileged: true
     environment:
       - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
       - ./:/workspace
