@@ -97,6 +97,14 @@ WORKDIR /workspace
 # Create setup script
 RUN echo '#!/bin/bash\n\
     source /opt/ros/humble/setup.bash\n \
-    alias build="colcon build --symlink-install"\n \
+    alias cbs="colcon build --symlink-install"\n \
+    alias cbp="colcon build --symlink-install --packages-select"\n \
+    alias cbu="colcon build --symlink-install --packages-up-to"\n \
+    alias ct="colcon test"\n \
+    alias ctp="colcon test --packages-select"\n \
+    alias ctp="colcon test-result"\n \
+    alias rt="ros2 topic list"\n \
+    alias re="ros2 topic echo"\n \
+    alias rn="ros2 node list"\n \
     alias ros="source ./install/setup.bash"\n \
     ' > /home/bulnabi/.bashrc
