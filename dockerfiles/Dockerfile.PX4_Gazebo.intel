@@ -48,11 +48,9 @@ RUN cd Micro-XRCE-DDS-Agent && \
     sudo ldconfig /usr/local/lib/
 
 # Copy world/models
-COPY ../src/gazebo_assets/standard_vtol/ /PX4-Autopilot/Tools/simulation/gz/models/standard_vtol
+COPY ../src/gazebo_assets/ /tmp/gazebo_assets/
+RUN rsync -av --exclude='RAC_2025.sdf' /tmp/gazebo_assets/ /PX4-Autopilot/Tools/simulation/gz/models/
+
 COPY ../src/gazebo_assets/RAC_2025.sdf /PX4-Autopilot/Tools/simulation/gz/worlds/
-COPY ../src/gazebo_assets/box /PX4-Autopilot/Tools/simulation/gz/models/box
-COPY ../src/gazebo_assets/apriltag /PX4-Autopilot/Tools/simulation/gz/models/apriltag
-COPY ../src/gazebo_assets/ground /PX4-Autopilot/Tools/simulation/gz/models/ground
-COPY ../src/gazebo_assets/red_marker /PX4-Autopilot/Tools/simulation/gz/models/red_marker
 
 WORKDIR /PX4-Autopilot
