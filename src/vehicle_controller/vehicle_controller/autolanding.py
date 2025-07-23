@@ -10,7 +10,7 @@ from vehicle_controller.code_basic.px4_base import PX4BaseController
 from vehicle_controller.code_basic.bezier_handler import BezierCurve
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, VehicleGlobalPosition
-from geometry_msgs.msg import PoseStamped # AprilTag detector output (tag pose relative to camera)
+from custom_msgs.msg import LandingTagLocation # AprilTag detector output (tag pose relative to camera)
 
 import numpy as np
 import math
@@ -54,7 +54,7 @@ class AutoLandingController(PX4BaseController):
 
         # AprilTag subscriber
         self.create_subscription(
-            PoseStamped,
+            LandingTagLocation,
             self.TAG_TOPIC,
             self._on_tag_pose,
             QoSProfile(depth=10,
@@ -235,7 +235,7 @@ class AutoLandingController(PX4BaseController):
     # ==============================
     # Callbacks
     # ==============================
-    def _on_tag_pose(self, msg: PoseStamped):
+    def _on_tag_pose(self, msg: LandingTagLocation):
         """
         Converts camera-frame tag pose → NED relative vector.
         Assumes msg.pose.position is the tag's position relative to the camera.
