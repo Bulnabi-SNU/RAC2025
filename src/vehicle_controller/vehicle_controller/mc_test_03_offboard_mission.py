@@ -16,6 +16,9 @@ import math
 # gps
 import pymap3d as p3d
 
+# import plan
+import json
+
 class MissionController(PX4BaseController):
     
     def __init__(self):
@@ -143,23 +146,25 @@ class MissionController(PX4BaseController):
         if self.is_offboard_mode():
             self.set_mission_mode()
         elif self.is_mission_mode():
-            if np.linalg.norm(self.pos - self.WP[self.current_point_index]) < self.mc_arrival_radius:
-                self.get_logger().info(f"Current position : {self.pos}")
+            if np.linalg.norm(self.pos - self.WP[self.current_point_index]) < 5:
                 self.get_logger().info(f"Reached waypoint {self.current_point_index + 1}")
                 self.current_point_index += 1
                 if self.current_point_index >= self.num_wp:
                     self.get_logger().info("All waypoints reached. Switch to Offboard mode...")
-                    self.set_offboard_mode()
                     self.state = 'LANDING'
                     self.phase = 3
                     return
 
     def _handle_landing(self):
         """Handle landing state"""
-        self.land()
-        self.get_logger().info("Landing command sent")
-        self.get_logger().info("Mission complete!")
-        self.state = 'MISSION_COMPLETE'
+        if self.is_mission_mode():
+            self.set_offboard_mode()
+        elif self.is_offboard_mode():
+            self.get_logger().info("Switched to Offboard mode. Sending landing command...")
+            self.land()
+            self.get_logger().info("Landing command sent")
+            self.get_logger().info("Mission complete!")
+            self.state = 'MISSION_COMPLETE'
     
     def _handle_mission_complete(self):
         """Handle mission complete state"""
