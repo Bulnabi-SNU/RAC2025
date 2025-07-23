@@ -76,6 +76,15 @@ class ImageProcessor(Node):
         self.queueSize=20
         self.last_image = None
 
+        # Camera intrinsics
+        self.K = np.array([                                                                     # Camera intrinsics
+                            [1070.089695, 0.0, 1045.772015],
+                            [0.0, 1063.560096, 566.257075],
+                            [0.0, 0.0, 1.0]
+                        ], dtype=np.float64)
+        self.D = np.array([-0.090292, 0.052332, 0.000171, 0.006618, 0.0], dtype=np.float64)      # Camera distortion
+        self.tag_size=0.5
+
         """
         1. Subscribers & Publishers & Timers
         """
