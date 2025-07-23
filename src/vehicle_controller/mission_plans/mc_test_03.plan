@@ -16,17 +16,17 @@
         "items": [
             {
                 "AMSLAltAboveTerrain": null,
-                "Altitude": 50,
+                "Altitude": 0,
                 "AltitudeMode": 1,
                 "autoContinue": true,
                 "command": 22,
                 "doJumpId": 1,
                 "frame": 3,
                 "params": [
-                    15,
                     0,
                     0,
                     0,
+                    null,
                     37.455914,
                     126.954218,
                     5
@@ -35,7 +35,7 @@
             },
             {
                 "AMSLAltAboveTerrain": null,
-                "Altitude": 5,
+                "Altitude": 0,
                 "AltitudeMode": 1,
                 "autoContinue": true,
                 "command": 16,
@@ -54,7 +54,7 @@
             },
             {
                 "AMSLAltAboveTerrain": null,
-                "Altitude": 5,
+                "Altitude": 0,
                 "AltitudeMode": 1,
                 "autoContinue": true,
                 "command": 16,
@@ -76,8 +76,27 @@
                 "Altitude": 0,
                 "AltitudeMode": 1,
                 "autoContinue": true,
-                "command": 21,
+                "command": 16,
                 "doJumpId": 4,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    37.455914,
+                    126.954218,
+                    5
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 0,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 21,
+                "doJumpId": 5,
                 "frame": 3,
                 "params": [
                     0,
@@ -92,7 +111,7 @@
             }
         ],
         "plannedHomePosition": [
-            37.455914,
+            37.4559137,
             126.9542179,
             160
         ],
