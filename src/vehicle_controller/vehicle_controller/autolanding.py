@@ -29,7 +29,7 @@ class AutoLandingController(PX4BaseController):
     # ------------------------------------------------
     # Tunables
     # ------------------------------------------------
-    TAG_TOPIC           = "/tag_detections/pose"   # AprilTag `PoseStamped` (tag pose in camera frame)
+    TAG_TOPIC           = "/landing_tag_position"   # AprilTag `PoseStamped` (tag pose in camera frame)
     TARGET_OFFSET_Z     = 0.5                      # [m] 태그 상공 (positive value means above the tag in NED-Z, so reduce NED Z)
     DESCENT_SPEED_D     = 0.3                      # [m/s]  (NED Down +)
     ARRIVAL_RADIUS_XY   = 0.25                     # [m] Bezier 끝점 XY 수렴 기준
@@ -52,20 +52,29 @@ class AutoLandingController(PX4BaseController):
         self.tag_rel_ned    = np.zeros(3) # Tag's position relative to drone in NED frame
         self.last_tag_time  = self.get_clock().now() # For tag lost timeout
 
+        # Match QOS profile with image_processing_node when subscribing for landingtag, etc....
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,   # Change back to TRANSIENT_LOCAL for actual test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 아니면 에러 뜸
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         # AprilTag subscriber
         self.create_subscription(
             LandingTagLocation,
             self.TAG_TOPIC,
-            self._on_tag_pose,
-            QoSProfile(depth=10,
-                       reliability=ReliabilityPolicy.RELIABLE,
-                       history    =HistoryPolicy.KEEP_LAST)
+            self.image_callback,
+            qos_profile
         )
 
         self.offboard_control_mode_params['position'] = True
         self.offboard_control_mode_params['velocity'] = False
 
         self.get_logger().info("Auto-landing controller initialised")
+
+
+
 
     # =================================================
     # Main state-machine loop (called by PX4Base)
@@ -142,7 +151,7 @@ class AutoLandingController(PX4BaseController):
         # self.pos: drone's current position in NED (local)
         # self.tag_rel_ned: tag's position relative to drone in NED
         # So, drone's position + tag's relative position = tag's absolute position in local NED
-        target_ned = self.pos + self.tag_rel_ned
+        target_ned = self.pos + self.tag_rel_ned # coordinate transformation 잘 해주기
         
         # Adjust Z to be TARGET_OFFSET_Z meters *above* the tag
         # If target_ned[2] is positive down, to move up (above tag), we decrease the Z value.
@@ -156,7 +165,7 @@ class AutoLandingController(PX4BaseController):
             max_velocity = self.VMAX_XY,
             total_time   = None # Bezier handler calculates time based on max_velocity
         )
-        self.path       = self.bezier.path
+        self.path       = self.bezier.trajectory_points
         self.bezier_i   = 0
         self.state      = 'ALIGN'
         self.get_logger().info(f"Tag locked at local NED: ({target_ned[0]:.2f}, {target_ned[1]:.2f}, {target_ned[2]:.2f}) – generated Bezier path, entering ALIGN")
@@ -235,7 +244,7 @@ class AutoLandingController(PX4BaseController):
     # ==============================
     # Callbacks
     # ==============================
-    def _on_tag_pose(self, msg: LandingTagLocation):
+    def image_callback(self, msg: LandingTagLocation):
         """
         Converts camera-frame tag pose → NED relative vector.
         Assumes msg.pose.position is the tag's position relative to the camera.
@@ -247,9 +256,9 @@ class AutoLandingController(PX4BaseController):
         Based on these assumptions, the transformation would be direct.
         If your ImageProcessor provides camera position relative to tag, the logic needs to be flipped.
         """
-        p_cam = np.array([msg.pose.position.x,
-                          msg.pose.position.y,
-                          msg.pose.position.z])
+        p_cam = np.array([msg.x,
+                          msg.y,
+                          msg.z])
         
         # Assuming camera +X is drone +X (North), camera +Y is drone +Y (East), camera +Z is drone +Z (Down)
         # This implies:

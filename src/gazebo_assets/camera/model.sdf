@@ -27,25 +27,24 @@
       </visual>
       <sensor name="camera" type="camera">
         <camera>
-            <horizontal_fov>0.296</horizontal_fov>
-            <image>
-                <width>2096</width>
-                <height>1200</height>
-            </image>
-            <clip>
-                <near>0.1</near>
-                <far>100</far>
-            </clip>
-            <distortion>
-                <k1>-0.090292</k1>
-                <k2>0.052332</k2>
-                <k3>0.0</k3>
-                <p1>0.000171</p1>
-                <p2>0.006618</p2>
-                <center>0.499 0.472</center>
-            </distortion>
+          <horizontal_fov>1.13</horizontal_fov>
+          <image>
+            <width>2096</width>
+            <height>1200</height>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+          <distortion>
+            <k1>-0.090292</k1>
+            <k2>0.052332</k2>
+            <k3>0.0</k3>
+            <p1>0.000171</p1>
+            <p2>0.006618</p2>
+            <center>0.499 0.472</center>
+          </distortion>
         </camera>
-
         <always_on>1</always_on>
         <update_rate>30</update_rate>
         <visualize>true</visualize>
