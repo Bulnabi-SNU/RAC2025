@@ -21,7 +21,9 @@ setup(
     entry_points={
         'console_scripts': [
             'image_processing_node = vision_processing_nodes.image_processing_node:main',
+            'image_processing_node_gazebo = vision_processing_nodes.image_processing_node_gazebo:main',
             'camera_publisher_node = vision_processing_nodes.camera_publisher_node:main',
+
         ],
     },
 )
