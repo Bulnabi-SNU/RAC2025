@@ -57,9 +57,10 @@ RUN rsync -av --exclude='RAC_2025.sdf' /tmp/gazebo_assets/ /PX4-Autopilot/Tools/
 
 WORKDIR /PX4-Autopilot
 
-# Patch for adding topic
-COPY ./MissionResult.patch /tmp/MissionResult.patch
-RUN git apply /tmp/MissionResult.patch && make px4_sitl
+# Custom dds topic list
+COPY ../dockerfiles/dds_topics.yaml /PX4-Autopilot/src/modules/uxrce_dds_client/dds_topics.yaml
+RUN make px4_sitl
+
 
 # Create setup script
 RUN echo '#!/bin/bash\n\
