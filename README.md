@@ -51,3 +51,13 @@ ros2 run <package> <node> --ros-args --params-file <.yaml file path>
 
 ros2 run test_nodes mc_test_01 --ros-args --params-file ~/RAC2025/src/vehicle_controller/waypoints/skeleton_code.yaml
 ```
+
+
+## Changed Params:
+
+Disabled QuadChute
+Disabled Weathervaning
+Increased NAV_ACC_RAD to 20 m (set radii on a per-waypoint basis (param2=0.5) for accurate ones)
+Decreased NAV_FW_ALT_RAD to 3 m
+Decreased VT_B_TRANS_DUR to 8 s
+Set MPC_YAW_MODE to along trajectory
