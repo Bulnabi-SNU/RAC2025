@@ -21,9 +21,9 @@ class MissionController(PX4BaseController):
        super().__init__('mc_main')
    
        # Mission parameters
-       self.pickup_waypoint = 8  # waypoint number for pickup
-       self.dropoff_waypoint = 9    # waypoint number for dropoff
-       self.landing_waypoint = 10 # waypoint number for landing
+       self.pickup_waypoint = 14  # waypoint number for pickup
+       self.dropoff_waypoint = 15    # waypoint number for dropoff
+       self.landing_waypoint = 16 # waypoint number for landing
        self.pickup_altitude = -2.0  # altitude for pickup/dropoff operations
        self.mission_altitude = -5.0 # normal mission altitude
        
@@ -34,7 +34,7 @@ class MissionController(PX4BaseController):
        self.offboard_control_mode_params['velocity'] = False
        
        # State machine
-       self.state = 'INIT'
+       self.state = 'MISSION_EXECUTE'  # Initial state
        self.mission_paused_waypoint = 0
        self.pickup_complete = False
        
@@ -94,15 +94,11 @@ class MissionController(PX4BaseController):
            self._handle_error()
 
         self.vehicle_state_publisher.publish(
-            # VehicleState(
-            #     vehicle_state=self.state,
-            #     detect_target_type=1 if self.state in ['CASUALTY_TRACK', 'DESCEND_PICKUP', 'GRIPPER_CLOSE', 'ASCEND_PICKUP'] 
-            #     else 2 if self.state in ['DROPOFF_CASUALTY_TRACK', 'DESCEND_DROPOFF', 'GRIPPER_OPEN', 'ASCEND_DROPOFF'] 
-            #     else 3 if self.state in ['FINAL_CASUALTY_TRACK', 'FINAL_DESCEND'] else 0
-            # )
             VehicleState(
                 vehicle_state=self.state,
-                detect_target_type=2
+                detect_target_type=1 if self.state in ['CASUALTY_TRACK', 'DESCEND_PICKUP', 'GRIPPER_CLOSE', 'ASCEND_PICKUP'] 
+                else 2 if self.state in ['DROPOFF_CASUALTY_TRACK', 'DESCEND_DROPOFF', 'GRIPPER_OPEN', 'ASCEND_DROPOFF'] 
+                else 3 if self.state in ['FINAL_CASUALTY_TRACK', 'FINAL_DESCEND'] else 0
             )
         )
         
@@ -110,7 +106,7 @@ class MissionController(PX4BaseController):
         """Callback for target coordinates from image_processing_node"""
         if msg is not None:
             self.target = msg
-            self.get_logger().info(f"Received target coordinates: {self.target.x}, {self.target.y}")
+            # self.get_logger().info(f"Received target coordinates: {self.target.x}, {self.target.y}")
         
    
    #=======================================
@@ -150,7 +146,7 @@ class MissionController(PX4BaseController):
    def _handle_mission_execute(self):
        """Execute mission"""
        if not self.is_mission_mode():
-           self.get_logger().error("Not in mission mode at MISSION_EXECUTE")
+        #    self.get_logger().error("Not in mission mode at MISSION_EXECUTE")
            return
 
        current_wp = self.mission_wp_num 
@@ -181,18 +177,30 @@ class MissionController(PX4BaseController):
    
    def _handle_casualty_track(self):
        """Track casualty using CV"""
-       # TODO: Implement CV/ArUco casualty tracking
-       # Use self.casualty_coordinates from external system
-       if self.casualty_coordinates is not None:
-           casualty_pos = np.array([self.casualty_coordinates[0], self.casualty_coordinates[1], self.pos[2]])
-           self.publish_setpoint(pos_sp=casualty_pos)
-           
-           # Check if over casualty
-           distance = np.linalg.norm(casualty_pos[:2] - self.pos[:2])
-           if distance < self.mc_arrival_radius:
-               self.state = 'DESCEND_PICKUP'
-       else:
-           self.get_logger().warn("No casualty coordinates available")
+       # TODO: check if target is set
+       # TODO: Make better tracking logic
+       # TODO: Move tracking logic to separate file 
+       pos_delta = self.pos[2] * np.tan(np.array([ self.target.angle_y, self.target.angle_x]))
+       dist = np.linalg.norm(pos_delta) + 0.0000001
+       pos_delta = pos_delta / dist * 0.1
+       m = np.eye(2)
+       
+       m[0, 0] = np.cos(self.yaw)
+       m[0, 1] = np.sin(self.yaw)
+       m[1, 0] = -np.sin(self.yaw)
+       m[1, 1] = np.cos(self.yaw)
+       
+       self.get_logger().info(f"Tracking casualty at angles: {self.target.angle_x}, {self.target.angle_y}")
+       self.get_logger().info(f"Position delta: {pos_delta}")
+       
+       casualty_pos = -m @ pos_delta + np.array([self.pos[0], self.pos[1]])
+       
+       self.publish_setpoint(pos_sp=[casualty_pos[0], casualty_pos[1], 5.0])
+       
+       # Check if over casualty
+       
+       if dist < 0.5:
+           self.state = 'DESCEND_PICKUP'
    
    def _handle_descend_pickup(self):
        """Lower altitude to pickup position"""

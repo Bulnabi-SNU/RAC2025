@@ -32,7 +32,7 @@ lower_orange = np.array([5, 150, 150])
 upper_orange = np.array([20, 255, 255])
 min_area = 500
 
-use_gazebo = False  # Set to True if running in Gazebo, False for live camera or video feed
+use_gazebo = True  # Set to True if running in Gazebo, False for live camera or video feed
 
 class ImageProcessor(Node):
 
