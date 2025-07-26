@@ -16,10 +16,13 @@ import math
 # gps
 import pymap3d as p3d
 
+# import plan
+import json
+
 class MissionController(PX4BaseController):
     
     def __init__(self):
-        super().__init__('mc_test_02_bezier_triangle')
+        super().__init__('mc_test_03_offboard_mission')
     
         self.num_wp = 4
         self.WP = [np.array([0.0, 0.0, -5.0]), 
@@ -63,6 +66,9 @@ class MissionController(PX4BaseController):
         
         elif self.state == 'BEZIER_NAV':
             self._handle_bezier_nav()
+
+        elif self.state == 'MISSION_MODE':
+            self._handle_mission_mode() 
         
         elif self.state == 'LANDING':
             self._handle_landing()
@@ -81,7 +87,6 @@ class MissionController(PX4BaseController):
                 self.get_logger().info("Vehicle in offboard mode but disarmed. Arming...")
                 self.arm()
             else:
-                self.get_logger().info("Vehicle armed. Commanding takeoff...")
                 self.takeoff()
         
         elif self.is_auto_takeoff():
@@ -107,7 +112,7 @@ class MissionController(PX4BaseController):
     
     def _handle_bezier_nav(self):
         """Handle bezier navigation state"""
-        if self.current_point_index < self.num_wp - 1:
+        if self.current_point_index < self.num_wp - 1: # Except last point
             if self.bezier_flag is False:
                 # generate bezier curve just once per WP
                 self.bezier_flag = True
@@ -128,22 +133,38 @@ class MissionController(PX4BaseController):
             if distance < self.mc_arrival_radius:
                 self.current_point_index += 1
                 self.bezier_flag = False
-                if self.current_point_index >= self.num_wp:
-                    self.get_logger().info("All waypoints reached. Landing...")
-                    self.state = 'LANDING'
-                    return
-                self.get_logger().info("Waypoints reached. Moving to next waypoint")
 
         else:
-            print("Bezier flight complete. Landing...")
-            self.state = 'LANDING'
+            print("Bezier navigation complete. Switching to mission mode...")
+            self.state = 'MISSION_MODE'
+            self.phase = 2
+            # print("Bezier flight complete. Landing...")
+            # self.state = 'LANDING'
     
+    def _handle_mission_mode(self):
+        """Handle mission mode state"""
+        if self.is_offboard_mode():
+            self.set_mission_mode()
+        elif self.is_mission_mode():
+            if np.linalg.norm(self.pos - self.WP[self.current_point_index]) < 5:
+                self.get_logger().info(f"Reached waypoint {self.current_point_index + 1}")
+                self.current_point_index += 1
+                if self.current_point_index >= self.num_wp:
+                    self.get_logger().info("All waypoints reached. Switch to Offboard mode...")
+                    self.state = 'LANDING'
+                    self.phase = 3
+                    return
+
     def _handle_landing(self):
         """Handle landing state"""
-        self.land()
-        self.get_logger().info("Landing command sent")
-        self.get_logger().info("Mission complete!")
-        self.state = 'MISSION_COMPLETE'
+        if self.is_mission_mode():
+            self.set_offboard_mode()
+        elif self.is_offboard_mode():
+            self.get_logger().info("Switched to Offboard mode. Sending landing command...")
+            self.land()
+            self.get_logger().info("Landing command sent")
+            self.get_logger().info("Mission complete!")
+            self.state = 'MISSION_COMPLETE'
     
     def _handle_mission_complete(self):
         """Handle mission complete state"""

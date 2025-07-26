@@ -617,16 +617,30 @@
       </inertial>
     </link>
 
-   <include merge='true'>
+
+<!-- Camera calibration 정보 추가한 카메라 모델 만들어서 바꿔줌. 원래 썼던 mono_cam은 아래 있음 -->
+       <include merge='true'>
+          <uri>model://camera</uri>
+          <pose>0 0 -0.01 0 1.5707 0</pose>  <!-- 이 z 위치가 vtol 중심으로부터 카메라의 상대적인 위치. 그러나 30cm 아래로 하면 바닥을 뚫고 내려가버린다. 일단은 -0.03로 설정 -->
+          <name>camera</name>
+        </include>
+        <joint name="CameraJoint" type="fixed">
+          <parent>base_link</parent>
+          <child>camera_link</child>
+          <pose relative_to="base_link">0 0 0 0 0 0</pose>
+        </joint>  
+
+
+   <!-- <include merge='true'>
       <uri>model://mono_cam</uri>
-       <pose>0 0 -0.03 0 1.5707 0</pose>  <!-- 이 z 위치가 vtol 중심으로부터 카메라의 상대적인 위치. 그러나 30cm 아래로 하면 바닥을 뚫고 내려가버린다. 일단은 -0.03로 설정 -->
+       <pose>0 0 -0.03 0 1.5707 0</pose> 
       <name>mono_cam</name>
     </include>
     <joint name="CameraJoint" type="fixed">
       <parent>base_link</parent>
       <child>camera_link</child>
       <pose relative_to="base_link">0 0 0 0 1.5707 0</pose>
-    </joint>   
+    </joint>    -->
 
 
 <!-- 설정 변경이 필요하다면 620-629 코멘트하고 밑의 코드를 사용할 것.
