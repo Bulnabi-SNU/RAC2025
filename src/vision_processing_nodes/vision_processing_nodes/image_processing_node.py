@@ -32,7 +32,7 @@ lower_orange = np.array([5, 150, 150])
 upper_orange = np.array([20, 255, 255])
 min_area = 500
 
-use_gazebo = True  # Set to True if running in Gazebo, False for real camera
+use_gazebo = False  # Set to True if running in Gazebo, False for live camera or video feed
 
 class ImageProcessor(Node):
 
@@ -151,6 +151,7 @@ class ImageProcessor(Node):
         
     def state_callback(self, msg):
         self.vehicle_state = msg
+        self.get_logger().debug(f"Vehicle state updated: detect_target_type = {msg.detect_target_type}") #for logging vehiclestate
 
     def image_callback(self, msg):
         self.last_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -184,7 +185,7 @@ class ImageProcessor(Node):
 
     def detect_landing_tag(self, image): #to-do
         if image is None:
-            return np.array([-1,0,0,0,0]) # detection fail, return -1
+            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
         
         # Opencv aruco settings for apriltag detection
         dictionary   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
@@ -197,7 +198,7 @@ class ImageProcessor(Node):
         # 태그 검출
         corners, ids, rejected = detector.detectMarkers(gray_image)
         if ids is None or len(ids) == 0:
-            return np.array([-1,0,0,0,0]) # detection fail, return -1
+            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
         
         # 일단 그냥 첫번째 태그 사용, 나중에 위에처럼 수정
         img_pts = corners[0].reshape(-1, 2).astype(np.float32)  # (4,2)
@@ -220,7 +221,7 @@ class ImageProcessor(Node):
                                         self.K, self.D,
                                         flags=cv2.SOLVEPNP_ITERATIVE)
         if not success:
-            return np.array([-2,0,0,0,0]) # pose estimate fail, return -2
+            return np.array([-2,0,0,0,0,0]) # pose estimate fail, return -2
 
         # Compute Rotation matrix and its inverse for camera position calculation
         R, _ = cv2.Rodrigues(rvec)

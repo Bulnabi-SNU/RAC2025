@@ -23,7 +23,7 @@ setup(
             'image_processing_node = vision_processing_nodes.image_processing_node:main',
             'image_processing_node_gazebo = vision_processing_nodes.image_processing_node_gazebo:main',
             'camera_publisher_node = vision_processing_nodes.camera_publisher_node:main',
-            'vehiclephase_publish_test = vision_processing_nodes.vehiclephase_publish_test:main',
+            'vehiclestate_publish_test = vision_processing_nodes.vehiclestate_publish_test:main',
         ],
     },
 )
