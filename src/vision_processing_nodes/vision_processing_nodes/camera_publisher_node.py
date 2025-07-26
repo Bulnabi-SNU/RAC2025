@@ -1,4 +1,5 @@
 # camera_publisher_node.py
+### IMPORTANT: go to main and check for the correct mode (camera for live, video for testing)
 
 """
 Camera Publisher Node
@@ -12,7 +13,7 @@ __contact__ = "tkweon426@snu.ac.kr"
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from sensor_msgs.msg import Image                   ### 나중에 센서 이미지 받아오는것 찾아보기 ###
+from sensor_msgs.msg import Image                   
 
 # import other libraries
 import os, math
