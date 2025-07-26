@@ -31,8 +31,8 @@ RUN apt-get update && apt-get install -y \
 RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}') && \
     curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $VERSION_CODENAME)_all.deb" && \
     dpkg -i /tmp/ros2-apt-source.deb && \
-    apt-get update && apt-get upgrade -y && \ 
-    apt-get install -y ros-humble-desktop python3-colcon-common-extensions
+    apt-get update && apt-get upgrade -y
+RUN apt-get install -y ros-humble-ros-base ros-dev-tools rviz
 
 #
 # Misc. Setup
@@ -42,7 +42,7 @@ RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-inf
 RUN apt-get install -y sudo vim git python3-pip python3-dev 
 
 # Install python packages
-RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip pip3 install \
     opencv-python \
     opencv-contrib-python \
     torch \
