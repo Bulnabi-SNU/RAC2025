@@ -27,7 +27,7 @@ class ImagePublisher(Node):
     # Initialize Node
     #============================================
 
-    def __init__(self):
+    def __init__(self, mode='camera', video_path='video.mp4'):
         super().__init__('image_publisher_node')
         """
         0. Configure QoS profile for publishing and subscribing
@@ -41,8 +41,21 @@ class ImagePublisher(Node):
         )
 
         # Lines for System Initialization
-        self.cameraDeviceNumber=1
-        self.camera = cv2.VideoCapture(self.cameraDeviceNumber)
+        self.mode = mode
+        self.videopath = video_path
+        self.cameraDeviceNumber=0
+
+        if self.mode == 'camera':
+            self.camera = cv2.VideoCapture(self.cameraDeviceNumber)
+        elif self.mode == 'video':
+            if not os.path.exists(video_path):
+                self.get_logger().error(f"Video file not found: {video_path}")
+                return
+            self.camera = cv2.VideoCapture(video_path)
+        else:
+            self.get_logger().error("invalid mode. Use 'camera' or 'video'.")
+            return
+        
         self.bridgeObject = CvBridge()
         self.topicNameFrames='topic_camera_image'
         self.queueSize=20
@@ -59,7 +72,7 @@ class ImagePublisher(Node):
         if not self.camera.isOpened():
             self.get_logger().error("Failed to open camera.")
             return
-
+        cv2.namedWindow("Camera Feed", cv2.WINDOW_NORMAL)
 
 
     #============================================
@@ -77,7 +90,12 @@ class ImagePublisher(Node):
     #============================================
     def timer_callbackFunction(self):
         success, frame = self.camera.read()
-        if success == True:
+        if self.mode == 'video' and not success:
+            self.camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            success, frame = self.camera.read()
+        if success:
+            cv2.imshow("Camera Feed", frame)
+            cv2.waitKey(1)  
             ROS2ImageMessage=self.bridgeObject.cv2_to_imgmsg(frame,encoding='bgr8')
             self.image_publisher.publish(ROS2ImageMessage)
             self.get_logger().info('Publishing image number %d' % self.i)
@@ -96,8 +114,18 @@ class ImagePublisher(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ImagePublisher()
-    rclpy.spin(node)
-    node.destroy_node()
-    node.camera.release()
-    rclpy.shutdown()
+
+    #============================================
+    # Choose 'camera' or 'video' mode for testing
+    #============================================
+    mode = 'video'  # or 'camera'
+    video_path = '/workspace/src/vision_processing_nodes/vision_processing_nodes/videos/apriltag_video.mov'
+    node = ImagePublisher(mode=mode, video_path=video_path)
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        node.camera.release()
+        rclpy.shutdown()
