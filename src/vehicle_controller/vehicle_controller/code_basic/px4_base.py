@@ -16,6 +16,7 @@ from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleLocalPosition
 from px4_msgs.msg import VehicleGlobalPosition
 from px4_msgs.msg import SensorGps # for log
+from px4_msgs.msg import MissionResult 
 """msgs for publishing"""
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
@@ -27,6 +28,8 @@ from abc import ABC, abstractmethod
 # gps
 import pymap3d as p3d
 
+# Custom Messages
+from custom_msgs.msg import VehicleState, TargetLocation
 
 class PX4BaseController(Node, ABC):
     """
@@ -95,7 +98,12 @@ class PX4BaseController(Node, ABC):
         self.home_position = np.array([0.0, 0.0, 0.0])
         self.home_position_gps = np.array([0.0, 0.0, 0.0])
         self.home_yaw = 0.0
-        
+
+        # Mission variables
+        self.mission_result = None
+        self.mission_wp_num = None
+
+
         # Heartbeat timing
         self.last_heartbeat_time = None
     
@@ -115,6 +123,13 @@ class PX4BaseController(Node, ABC):
             VehicleGlobalPosition, '/fmu/out/vehicle_global_position', 
             self._vehicle_global_position_callback, self.qos_profile
         )
+
+        self.vehicle_mission_subscriber = self.create_subscription(
+            MissionResult, '/fmu/out/mission_result', 
+            self._mission_result_callback, self.qos_profile
+        )
+
+
     
     def _create_publishers(self):
         """Create all ROS2 publishers"""
@@ -128,6 +143,10 @@ class PX4BaseController(Node, ABC):
         
         self.trajectory_setpoint_publisher = self.create_publisher(
             TrajectorySetpoint, '/fmu/in/trajectory_setpoint', self.qos_profile
+        )
+
+        self.vehicle_state_publisher = self.create_publisher(
+            VehicleState, '/vehicle_state', self.qos_profile
         )
     
     def _setup_timers(self):
@@ -196,7 +215,30 @@ class PX4BaseController(Node, ABC):
         self.on_global_position_update(msg)
         if self.get_position_flag and self.home_set_flag:
             self.pos = self.pos - self.home_position
+
+    def _mission_result_callback(self, msg):
+        self.mission_result = msg
+        self.mission_wp_num = msg.seq_current
     
+   #=======================================
+   # Additional Functions
+   #=======================================
+   
+    def on_vehicle_status_update(self, msg):
+       """Override to handle vehicle status updates"""
+       # Could add additional status monitoring here
+       pass
+   
+    def on_local_position_update(self, msg):
+       """Override to handle local position updates"""
+       # Could add position monitoring here
+       pass
+   
+    def on_global_position_update(self, msg):
+       """Override to handle global position updates"""
+       # Could add GPS monitoring here
+       pass
+
     #=======================================
     # Publisher Callback functions
     #=======================================
