@@ -10,8 +10,10 @@ PX4_Autopilot: main
 px4_msgs: main
 
 # TODO
-Refactor image recognition
-Create/separate target tracking code into separate file.
+Refactor image recognition (WIP)
+Create/separate target tracking code into separate file. (DONE)
+- Create tracking code that uses beizier (if needed)
+Add more test cases (esp. for tracking)
 Update README
 
 ## Changed Params:

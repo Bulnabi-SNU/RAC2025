@@ -85,7 +85,7 @@ class CasualtyDetector:
     def detect_casualty_far(self,frame):
         """멀리용: 마스크된 모든 픽셀의 평균 좌표 반환"""
         hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_orange, upper_orange)
+        mask = cv2.inRange(hsv, self.lower_orange, self.upper_orange)
         ys, xs = np.where(mask > 0)
         if len(xs) == 0:
             return None

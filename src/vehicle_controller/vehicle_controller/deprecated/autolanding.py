@@ -6,8 +6,8 @@ __contact__ = ""
 # ----------------------------------------------------
 import rclpy
 from rclpy.qos          import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from vehicle_controller.code_basic.px4_base import PX4BaseController
-from vehicle_controller.code_basic.bezier_handler import BezierCurve
+from vehicle_controller.core.px4_base import PX4BaseController
+from vehicle_controller.core.bezier_handler import BezierCurve
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, VehicleGlobalPosition
 from custom_msgs.msg import LandingTagLocation # AprilTag detector output (tag pose relative to camera)
@@ -266,13 +266,9 @@ class AutoLandingController(PX4BaseController):
         # p_cam[1] -> relative East
         # p_cam[2] -> relative Down
         # So, the tag's position relative to the drone in NED is simply p_cam.
-        self.tag_rel = np.array([ -p_cam[1],  # Tag's X in camera frame -> Drone's X (North)
-                                      -p_cam[0],  # Tag's Y in camera frame -> Drone's Y (East)
+        self.tag_rel_ned = np.array([ p_cam[0],  # Tag's X in camera frame -> Drone's X (North)
+                                      p_cam[1],  # Tag's Y in camera frame -> Drone's Y (East)
                                       p_cam[2] ]) # Tag's Z in camera frame -> Drone's Z (Down)
-        R_z = np.array([[np.cos(self.yaw), -np.sin(self.yaw), 0],
-                        [np.sin(self.yaw), np.cos(self.yaw), 0],
-                        [0, 0, 1]])
-        self.tag_rel_ned = np.dot(R_z,self.tag_rel)
 
         # Update tag detection status and timestamp
         self.has_tag = True
