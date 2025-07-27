@@ -33,9 +33,6 @@ from vision_processing_nodes.detection.casualty import CasualtyDetector
 from vision_processing_nodes.detection.droptag import DropTagDetector
 from vision_processing_nodes.detection.utils import pixel_to_fov
 
-### MODE SETTING (GAZEBO)
-use_gazebo = False  # Set to True if running in Gazebo, False for live camera or video feed
-
 class ImageProcessor(Node):
 
     #============================================
@@ -218,18 +215,20 @@ class ImageProcessor(Node):
     # ====== 바구니(오렌지색) HSV 캘리브레이션 범위 & 최소 면적 ======
     def publish_casualty_location(self):
         detection = self.casualty_detector.detect_casualty_with_angles(self.last_image)
-        if detection is None:
-            return
+       
         
         pos_msg = TargetLocation()
         pos_msg.x = float('nan')
         pos_msg.y = float('nan')
         pos_msg.z = float('nan')
         pos_msg.yaw = float('nan')
-         # Set angular coordinates from detection
-        pos_msg.angle_x = detection['angle_x']
-        pos_msg.angle_y = detection['angle_y']
+        pos_msg.angle_x = float('nan')
+        pos_msg.angle_y = float('nan')
+        if detection is not None:
+            pos_msg.angle_x = detection['angle_x']
+            pos_msg.angle_y = detection['angle_y']
         
+         # Set angular coordinates from detection        
         self.target_pub.publish(pos_msg)
         self.get_logger().info(f"Publishing target location: angle_x={pos_msg.angle_x:.2f}, angle_y={pos_msg.angle_y:.2f}") #optional
 
@@ -293,6 +292,14 @@ class ImageProcessor(Node):
         else:
             # Update state for no detection
             self.drop_tag_detected = False
+            pos_msg = TargetLocation()
+            pos_msg.x = float('nan')
+            pos_msg.y = float('nan')
+            pos_msg.z = float('nan')
+            pos_msg.yaw = float('nan')
+            pos_msg.angle_x = float('nan')
+            pos_msg.angle_y = float('nan')
+            self.target_pub.publish(pos_msg)
             # Optional: Log no detection (might be too verbose)
             # self.get_logger().info("DropTag not detected")
 
