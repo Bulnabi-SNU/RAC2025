@@ -32,7 +32,6 @@ lower_orange = np.array([5, 150, 150])
 upper_orange = np.array([20, 255, 255])
 min_area = 500
 
-use_gazebo = True  # Set to True if running in Gazebo, False for live camera or video feed
 
 class ImageProcessor(Node):
 
@@ -40,7 +39,7 @@ class ImageProcessor(Node):
     # Initialize Node
     #============================================
 
-    def __init__(self):
+    def __init__(self, use_gazebo=False):
         super().__init__('image_processor_node')
         """
         0. Configure QoS profile for publishing and subscribing
@@ -476,6 +475,13 @@ def pixel_to_fov(x, y, image_width, image_height, h_fov_deg=81, d_fov_deg=93):
 def main(args=None):
     rclpy.init(args=args)
     node = ImageProcessor()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+def main_gazebo(args=None):
+    rclpy.init(args=args)
+    node = ImageProcessor(use_gazebo=True)
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
