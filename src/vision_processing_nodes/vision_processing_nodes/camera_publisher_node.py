@@ -120,7 +120,7 @@ def main(args=None):
     # Choose 'camera' or 'video' mode for testing
     #============================================
     mode = 'video'  # or 'camera'
-    video_path = '/workspace/src/vision_processing_nodes/vision_processing_nodes/videos/apriltag_video.mov'
+    video_path = '/workspace/src/vision_processing_nodes/vision_processing_nodes/videos/droptag_video.mov'
     node = ImagePublisher(mode=mode, video_path=video_path)
     try:
         rclpy.spin(node)

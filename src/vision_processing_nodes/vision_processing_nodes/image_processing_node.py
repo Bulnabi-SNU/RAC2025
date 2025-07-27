@@ -27,11 +27,14 @@ import numpy as np
 import cv2
 from cv_bridge import CvBridge #helps convert ros2 images to OpenCV formats
 
-# define parameters for target detection (color range in hsv)
-lower_orange = np.array([5, 150, 150])
-upper_orange = np.array([20, 255, 255])
-min_area = 500
+# import detection functions and utilities
+from vision_processing_nodes.detection.landingtag import LandingTagDetector
+from vision_processing_nodes.detection.casualty import CasualtyDetector
+from vision_processing_nodes.detection.droptag import DropTagDetector
+from vision_processing_nodes.detection.utils import pixel_to_fov
 
+### MODE SETTING (GAZEBO)
+use_gazebo = False  # Set to True if running in Gazebo, False for live camera or video feed
 
 class ImageProcessor(Node):
 
@@ -120,7 +123,32 @@ class ImageProcessor(Node):
         timer_period = 0.05
         self.main_timer = self.create_timer(timer_period, self.main_timer_callback)
 
+        '''
+        2. Instantiating Different Detectors
+        '''
+        # [Landing Tag Detector]
+        self.landing_tag_detector = LandingTagDetector(
+            tag_size=self.tag_size,       
+            K=self.K,                     
+            D=self.D,                    
+        )
 
+        # [Casualty Detector]
+        self.casualty_detector = CasualtyDetector(
+            lower_orange=np.array([5, 150, 150]),
+            upper_orange=np.array([20, 255, 255]),
+            min_area=500
+        )
+
+        # [DropTag Detector]
+        self.droptag_detector = DropTagDetector(
+            lower_red1=np.array([0, 100, 50]),
+            upper_red1=np.array([10, 255, 255]),
+            lower_red2=np.array([170, 100, 50]),
+            upper_red2=np.array([180, 255, 255]),
+            min_area=500,
+            pause_threshold=0.4
+        )
 
     #============================================
     # "Timer" Callback Functions
@@ -156,12 +184,14 @@ class ImageProcessor(Node):
         self.last_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
     #============================================
-    # Landing Tag (AprilTag) Related Functions
+    # Landing Tag (AprilTag) Publisher
     #============================================ 
-
     def publish_landing_tag_location(self):
-        
-        detection = self.detect_landing_tag(self.last_image)
+        if self.last_image is None:
+            self.get_logger().warn("No image received in LandingTagDetector.")
+            return
+            
+        detection = self.landing_tag_detector.detect_landing_tag(self.last_image)
         if detection[0] == -1:
             self.get_logger().warn("No apriltags detected")
             return
@@ -179,80 +209,15 @@ class ImageProcessor(Node):
         
         self.target_pub.publish(pos_msg)
         self.get_logger().info(f"Publishing landing tag location: x={x:.2f}, y={y:.2f}, z={z:.2f}, yaw={yaw:.2f}, angle_x={angle_x:.2f}, angle_y={angle_y:.2f}")
-        
-
-
-    def detect_landing_tag(self, image): #to-do
-        if image is None:
-            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
-        
-        # Opencv aruco settings for apriltag detection
-        dictionary   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
-        det_params   = cv2.aruco.DetectorParameters()
-        detector     = cv2.aruco.ArucoDetector(dictionary, det_params)
-
-        # Gray scale conversion
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # 태그 검출
-        corners, ids, rejected = detector.detectMarkers(gray_image)
-        if ids is None or len(ids) == 0:
-            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
-        
-        # 일단 그냥 첫번째 태그 사용, 나중에 위에처럼 수정
-        img_pts = corners[0].reshape(-1, 2).astype(np.float32)  # (4,2)
-        tag_center = np.mean(img_pts, axis=0)  # (2,)
-
-        # solvePnP용 3D 좌표계 정의 (april_tag 좌표계 만드는 코드)
-        s = self.tag_size / 2.0
-        obj_pts = np.array([[-s,  s, 0],
-                            [ s,  s, 0],
-                            [ s, -s, 0],
-                            [-s, -s, 0]], dtype=np.float32)
-        
-        """
-        Solve PnP - 여기서 camera intrinsics and distortion 고려
-        success - 성공 여부에 대한 Boolean
-        rvec - rotation vector (단위)
-        tvec - transformation vector
-        """
-        success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts,
-                                        self.K, self.D,
-                                        flags=cv2.SOLVEPNP_ITERATIVE)
-        if not success:
-            return np.array([-2,0,0,0,0,0]) # pose estimate fail, return -2
-
-        # Compute Rotation matrix and its inverse for camera position calculation
-        R, _ = cv2.Rodrigues(rvec)
-        T = tvec                        # T vector renamed for 통일
-
-        # Calculate camera position - https://darkpgmr.tistory.com/122 math behind these calculations, https://m.blog.naver.com/jewdsa813/222210464716 for code
-        tag_pose_camera_frame = (-np.linalg.inv(R)@T).flatten()
-        
-        # Calculate yaw
-        unit_z_tag_frame = np.array([0.,0.,1.])
-        unit_z_camera_frame = np.linalg.inv(R)@unit_z_tag_frame         # No need to consider transformation in this case (only consider rotation)
-        yaw = np.arctan2(unit_z_camera_frame[1],unit_z_camera_frame[0]) - np.pi/2
-
-        # Return values
-        x = tag_pose_camera_frame[0]
-        y = tag_pose_camera_frame[1]
-        z = tag_pose_camera_frame[2]
-        
-        angle_x, angle_y = pixel_to_fov(
-            tag_center[0], tag_center[1],
-            image.shape[1], image.shape[0]
-        )
-        
-        return np.array([x,y,z,yaw,angle_x,angle_y])
+  
 
     #============================================
-    # Target (Basket) Related Functions
+    # Casualty (Basket) Publisher
     #============================================ 
 
     # ====== 바구니(오렌지색) HSV 캘리브레이션 범위 & 최소 면적 ======
     def publish_casualty_location(self):
-        detection = self.detect_casualty(self.last_image)
+        detection = self.casualty_detector.detect_casualty_with_angles(self.last_image)
         if detection is None:
             return
         
@@ -261,216 +226,79 @@ class ImageProcessor(Node):
         pos_msg.y = float('nan')
         pos_msg.z = float('nan')
         pos_msg.yaw = float('nan')
-        
-        pos_msg.angle_x, pos_msg.angle_y = pixel_to_fov(
-            detection[0], detection[1],
-            self.last_image.shape[1], self.last_image.shape[0]
-        )
+         # Set angular coordinates from detection
+        pos_msg.angle_x = detection['angle_x']
+        pos_msg.angle_y = detection['angle_y']
         
         self.target_pub.publish(pos_msg)
-        # self.get_logger().info(f"Publishing target location: angle_x={pos_msg.angle_x:.2f}, angle_y={pos_msg.angle_y:.2f}")
-        
-        
-    def detect_casualty(self, image):
-        h, w, _ = image.shape
-        # 1) 가까이용 시도
-        pt = self.detect_casualty_close(image)
-        mode = 'close'
-        # 2) 실패 시 원거리 시도
-        if pt is None:
-            pt = self.detect_casualty_far(image)
-            mode = 'far' if pt else 'none'
-        if pt is None:
-            return None
-        cx, cy = pt
-        # z, yaw, height는 필요에 따라 조정
-        return np.array([cx, cy])
-    
-    def detect_casualty_close(self,frame):
-        """가까이용: 면적이 충분한 가장 큰 컨투어 중심 반환"""
-        hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_orange, upper_orange)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-        cnt = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(cnt) < min_area:
-            return None
-        M = cv2.moments(cnt)
-        if M['m00'] == 0:
-            return None
-        cx = int(M['m10']/M['m00'])
-        cy = int(M['m01']/M['m00'])
-        return (cx, cy)
-
-    def detect_casualty_far(self,frame):
-        """멀리용: 마스크된 모든 픽셀의 평균 좌표 반환"""
-        hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_orange, upper_orange)
-        ys, xs = np.where(mask > 0)
-        if len(xs) == 0:
-            return None
-        return (int(xs.mean()), int(ys.mean()))   
-    
+        self.get_logger().info(f"Publishing target location: angle_x={pos_msg.angle_x:.2f}, angle_y={pos_msg.angle_y:.2f}") #optional
 
     #============================================
     # DropTag Related Functions
     #============================================ 
 
     def publish_casualty_dropoff_location(self):
-        """DropTag를 감지하고 중심으로 이동하는 메인 함수"""
+        """
+        Detect and publish DropTag location using DropTagDetector
+        Includes pause/resume logic based on red pixel ratio
+        """
         if self.last_image is None:
             return
-            
-        # HSV 색상 범위 (빨간색)
-        lower_red1 = np.array([0, 100, 50])
-        upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 100, 50])
-        upper_red2 = np.array([180, 255, 255])
         
-        # 1) 전체 이미지 빨간 비율 계산 (0.4 기준으로 일시정지/재개)
-        hsv_tmp = cv2.cvtColor(self.last_image, cv2.COLOR_BGR2HSV)
-        m1_tmp = cv2.inRange(hsv_tmp, lower_red1, upper_red1)
-        m2_tmp = cv2.inRange(hsv_tmp, lower_red2, upper_red2)
-        mask_tmp = cv2.bitwise_or(m1_tmp, m2_tmp)
-        red_ratio = cv2.countNonZero(mask_tmp) / mask_tmp.size
-        h, w = self.last_image.shape[:2]
-        screen_center = (w // 2, h // 2)
+        # Check if detection should be paused
+        should_pause, red_ratio, screen_center = self.droptag_detector.should_pause_detection(self.last_image)
+        state_changed, is_paused = self.droptag_detector.update_pause_state(should_pause)
         
-        if red_ratio > 0.4:
-            # 비율 높으면 일시정지 후 화면 중앙 좌표 출력
-            if not self.drop_tag_paused:
-                self.drop_tag_paused = True
+        # Log pause state changes
+        if state_changed:
+            if is_paused:
                 self.get_logger().info(f"DropTag detection paused. Center: {screen_center}")
-            return
-        else:
-            # 비율 낮아지면 재개 알림
-            if self.drop_tag_paused:
-                self.drop_tag_paused = False
+            else:
                 self.get_logger().info("DropTag detection resumed.")
-     
-
-        # DropTag 감지
-        detection_result = self.detect_casualty_dropoff(self.last_image)
         
-        if detection_result is not None:
-            tag_center, confidence, distance = detection_result
+        # Skip detection if paused
+        if is_paused:
+            return
+        
+        # Perform detection using the detector
+        detection = self.droptag_detector.detect_droptag_with_position(self.last_image)
+        
+        if detection is not None:
+            # Update state tracking
             self.drop_tag_detected = True
-            self.drop_tag_center = tag_center
-            self.drop_tag_confidence = confidence
+            self.drop_tag_center = detection['pixel_center']
+            self.drop_tag_confidence = detection['confidence']
             
-            # 화면 중심으로부터의 상대 위치 계산
-            h, w = self.last_image.shape[:2]
-            screen_center = (w // 2, h // 2)
-            dx = tag_center[0] - screen_center[0]
-            dy = screen_center[1] - tag_center[1]  # y축은 반전
+            # Extract position data
+            real_x, real_y, distance = detection['real_position']
+            angle_x, angle_y = detection['angles']
             
-            # 화면 좌표를 실제 거리로 변환 (카메라 캘리브레이션 필요)
-            # 간단한 변환: 픽셀 단위를 미터 단위로 변환
-            focal_length = 1000  # 픽셀 단위 (실제 카메라 캘리브레이션 값 사용)
-            real_x = (dx * distance) / focal_length
-            real_y = (dy * distance) / focal_length
-            
-            # DropTagLocation 메시지로 발행 (드론 위치 기준 상대 좌표)
+            # Create and publish ROS message
             pos_msg = TargetLocation()
-            pos_msg.x = real_x      # 드론 기준 전방 거리 (미터)
-            pos_msg.y = real_y      # 드론 기준 좌우 거리 (미터)
-            pos_msg.z = distance    # 드론 기준 상하 거리 (미터)
-            pos_msg.yaw = float('nan')       # 필요시 계산
-            pos_msg.angle_x, pos_msg.angle_y = pixel_to_fov(
-                tag_center[0], tag_center[1],
-                self.last_image.shape[1], self.last_image.shape[0]
-            )
+            pos_msg.x = real_x          # Real-world x position (meters)
+            pos_msg.y = real_y          # Real-world y position (meters)
+            pos_msg.z = distance        # Distance to target (meters)
+            pos_msg.yaw = float('nan')  # Orientation not calculated
+            pos_msg.angle_x = angle_x   # Angular position in FOV
+            pos_msg.angle_y = angle_y   # Angular position in FOV
             
             self.target_pub.publish(pos_msg)
-            self.get_logger().info(f"DropTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), Confidence: {confidence:.2f}, Angle: ({pos_msg.angle_x:.2f}, {pos_msg.angle_y:.2f})")
             
+            # Log detection info
+            confidence = detection['confidence']
+            self.get_logger().info(
+                f"DropTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), "
+                f"Confidence: {confidence:.2f}, Angle: ({angle_x:.2f}, {angle_y:.2f})"
+            )
         else:
+            # Update state for no detection
             self.drop_tag_detected = False
-            self.get_logger().info("DropTag not detected")
-
-    def detect_casualty_dropoff(self, image):
-        """
-        DropTag 감지 함수 (DropTagDetection_RedHsv.py 기반)
-        Returns: (tag_center, confidence, distance) or None
-        """
-        # HSV 색상 범위 (빨간색)
-        lower_red1 = np.array([0, 100, 50])
-        upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 100, 50])
-        upper_red2 = np.array([180, 255, 255])
-        
-        min_area = 500
-        
-        # HSV 변환 및 마스크 생성
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
-        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-        mask = cv2.bitwise_or(mask1, mask2)
-        
-        # 모폴로지 연산으로 노이즈 제거
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-        
-        # 컨투어 찾기
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if not contours:
-            return None
-            
-        # 가장 큰 컨투어 선택
-        largest_contour = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest_contour)
-        
-        if area < min_area:
-            return None
-            
-        # 중심점 계산
-        M = cv2.moments(largest_contour)
-        if M['m00'] == 0:
-            return None
-            
-        cx = int(M['m10'] / M['m00'])
-        cy = int(M['m01'] / M['m00'])
-        
-        # 신뢰도 계산 (면적 기반)
-        h, w = image.shape[:2]
-        total_pixels = h * w
-        confidence = area / total_pixels
-        
-        # 거리 추정 (면적 기반, 실제로는 카메라 캘리브레이션 필요)
-        # 간단한 추정: 면적이 클수록 가까움
-        distance = 1.0 / (confidence + 0.001)  # 0으로 나누기 방지
-        
-        return ((cx, cy), confidence, distance)
-
-
+            # Optional: Log no detection (might be too verbose)
+            # self.get_logger().info("DropTag not detected")
 
 #============================================
-# Helper Functions
+# Main Function
 #============================================
-
-def pixel_to_fov(x, y, image_width, image_height, h_fov_deg=81, d_fov_deg=93):
-    # Calculate vertical FOV
-    h_fov_rad = math.radians(h_fov_deg)
-    d_fov_rad = math.radians(d_fov_deg)
-    
-    # For 16:9 aspect ratio, calculate vertical FOV
-    aspect_ratio = 16/9
-    v_fov_rad = 2 * math.atan(math.tan(h_fov_rad/2) / aspect_ratio)
-    v_fov_deg = math.degrees(v_fov_rad)
-    
-    # Normalize pixel coordinates to [-1, 1]
-    norm_x = (2 * x / image_width) - 1
-    norm_y = (2 * y / image_height) - 1
-    
-    # Convert to angular coordinates (invert y since increase in y = going down)
-    angle_x = norm_x * (h_fov_deg / 2)
-    angle_y =- norm_y * (v_fov_deg / 2)
-    
-    return angle_x, angle_y
 
 def main(args=None):
     rclpy.init(args=args)
