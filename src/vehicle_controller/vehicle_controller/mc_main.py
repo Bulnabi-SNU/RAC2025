@@ -39,6 +39,7 @@ class MissionState(Enum):
     DROP_TAG_DESCEND = "DROP_TAG_DESCEND"
     GRIPPER_OPEN = "GRIPPER_OPEN"
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
+    MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG"
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
     FINAL_DESCEND = "FINAL_DESCEND"
     LAND = "LAND"
@@ -96,29 +97,31 @@ class MissionController(PX4BaseController):
         elif self.state == MissionState.MISSION_EXECUTE:
             self._handle_mission_execute()
         elif self.state == MissionState.MISSION_TO_OFFBOARD_CASUALTY:
-            self._handle_mission_to_offboard()
+            self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK)
         elif self.state == MissionState.CASUALTY_TRACK:
-            self._handle_casualty_track()
+            self._handle_track_target(MissionState.CASUALTY_DESCEND)
         elif self.state == MissionState.CASUALTY_DESCEND:
-            self._handle_descend_pickup()
+            self._handle_descend(MissionState.GRIPPER_CLOSE)
         elif self.state == MissionState.GRIPPER_CLOSE:
             self._handle_gripper_close()
         elif self.state == MissionState.CASUALTY_ASCEND:
-            self._handle_ascend_pickup()
+            self._handle_ascend()
         elif self.state == MissionState.MISSION_CONTINUE:
             self._handle_mission_continue()
         elif self.state == MissionState.MISSION_TO_OFFBOARD_DROP_TAG:
-            self._handle_mission_to_offboard_dropoff()
+            self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK)
         elif self.state == MissionState.DROP_TAG_TRACK:
-            self._handle_dropoff_casualty_track()
+            self._handle_track_target(MissionState.DROP_TAG_DESCEND)
         elif self.state == MissionState.DROP_TAG_DESCEND:
-            self._handle_descend_dropoff()
+            self._handle_descend(MissionState.GRIPPER_OPEN)
         elif self.state == MissionState.GRIPPER_OPEN:
             self._handle_gripper_open()
         elif self.state == MissionState.DROP_TAG_ASCEND:
-            self._handle_ascend_dropoff()
+            self._handle_ascend()
+        elif self.state == MissionState.MISSION_TO_OFFBOARD_LANDING_TAG:
+            self._handle_mission_to_offboard(MissionState.LANDING_TAG_TRACK)
         elif self.state == MissionState.LANDING_TAG_TRACK:
-            self._handle_landing_tag_track()
+            self._handle_track_target(MissionState.FINAL_DESCEND)
         elif self.state == MissionState.FINAL_DESCEND:
             self._handle_final_descend()
         elif self.state == MissionState.LAND:
@@ -239,113 +242,71 @@ class MissionController(PX4BaseController):
 
         # Check if reached landing waypoint
         if current_wp == self.landing_waypoint:
-            self.state = MissionState.LANDING_TAG_TRACK
+            self.state = MissionState.MISSION_TO_OFFBOARD_LANDING_TAG
             return
 
-    def _handle_mission_to_offboard(self):
+    def _handle_mission_to_offboard(self, nextState: MissionState):
         """Switch from mission to offboard for pickup"""
         if self.is_mission_mode():
             self.set_offboard_mode()
         elif self.is_offboard_mode():
-            self.state = MissionState.CASUALTY_TRACK
+            self.state = nextState
 
-    def _handle_casualty_track(self):
-        """Track casualty using CV"""
-        
+    def _handle_track_target(self, nextState: MissionState):
+        """Track target using vision and transition to next state when arrived"""
         if self.target is None:
             self.get_logger().warn("No target coordinates available, waiting for CV detection")
             return
-        
-        next_setpoint, arrived = self.drone_target_controller.update(self.pos, self.yaw, self.target.angle_x, self.target.angle_y)
+
+        next_setpoint, arrived = self.drone_target_controller.update(
+            self.pos, self.yaw, self.target.angle_x, self.target.angle_y
+        )
         self.publish_setpoint(pos_sp=next_setpoint)
 
-        # Check if over casualty
         if arrived:
-            self.state = MissionState.CASUALTY_DESCEND
+            self.state = nextState
 
-    def _handle_descend_pickup(self):
-        """Lower altitude to pickup position"""
-        pickup_pos = np.array([self.pos[0], self.pos[1], 0])
+    def _handle_descend(self, nextState: MissionState):
+        """Descend to casualty pickup position"""
+        # Set position setpoint to pickup altitude
+        pickup_pos = np.array([self.pos[0], self.pos[1], self.gripper_altitude])
         self.publish_setpoint(pos_sp=pickup_pos)
 
+        # Check if at pickup altitude
         if -self.pos[2] < self.gripper_altitude:
-            self.publish_setpoint(pos_sp=[self.pos[0], self.pos[1], self.gripper_altitude])
-            self.state = MissionState.GRIPPER_CLOSE
+            self.state=nextState
 
     def _handle_gripper_close(self):
         """Close gripper to pick up casualty"""
         # TODO: Implement gripper control
-        # Send gripper close command
+        
         self.get_logger().info("Closing gripper to pick up casualty")
-        # Simulate gripper operation delay
-        self.state = MissionState.CASUALTY_ASCEND
 
-    def _handle_ascend_pickup(self):
-        """Return to mission altitude with casualty"""
-        ascend_pos = np.array([self.pos[0], self.pos[1], self.mission_altitude])
-        self.publish_setpoint(pos_sp=ascend_pos)
-
-        if abs(self.pos[2] - self.mission_altitude) < 0.2:
-            self.pickup_complete = True
-            self.state = MissionState.OFFBOARD_TO_MISSION
-
-    def _handle_mission_to_offboard_dropoff(self):
-        """Switch from mission to offboard for dropoff"""
-        if self.is_mission_mode():
-            self.set_offboard_mode()
-        elif self.is_offboard_mode():
-            self.state = MissionState.DROP_TAG_TRACK
-
-    def _handle_dropoff_casualty_track(self):
-        """Track dropoff point (red cross) using CV/ArUco"""
-        if self.target is None:
-            self.get_logger().warn("No target coordinates available, waiting for CV detection")
-            return
-        
-        next_setpoint, arrived = self.drone_target_controller.update(self.pos, self.yaw, self.target.angle_x, self.target.angle_y)
-        self.publish_setpoint(pos_sp=next_setpoint)
-        
-        if arrived:
-            self.state = MissionState.DROP_TAG_DESCEND
-
-    def _handle_descend_dropoff(self):
-        """Lower altitude to dropoff position"""
-        dropoff_pos = np.array([self.pos[0], self.pos[1], 0])
-        self.publish_setpoint(pos_sp=dropoff_pos)
-
-        if -self.pos[2] < self.gripper_altitude:
-            self.publish_setpoint(pos_sp=[self.pos[0], self.pos[1], self.gripper_altitude])
-            self.state = MissionState.GRIPPER_OPEN
+        # TODO: Add logic to check if this state is complete
+        if True:
+            self.dropoff_complete = True
+            self.state = MissionState.DROP_TAG_ASCEND
 
     def _handle_gripper_open(self):
         """Open gripper to release casualty at dropoff point"""
         # TODO: Implement gripper control
         # Send gripper open command
         self.get_logger().info("Opening gripper to release casualty at dropoff point")
-        self.state = MissionState.DROP_TAG_ASCEND
+        
+        # TODO: Add logic to check if this state is complete
+        if True:
+            self.dropoff_complete = True
+            self.state = MissionState.DROP_TAG_ASCEND
 
-    def _handle_ascend_dropoff(self):
-        """Return to mission altitude after dropoff"""
+    def _handle_ascend(self):
+        """Return to mission altitude with casualty"""
         ascend_pos = np.array([self.pos[0], self.pos[1], self.mission_altitude])
         self.publish_setpoint(pos_sp=ascend_pos)
 
         if abs(self.pos[2] - self.mission_altitude) < 0.2:
-            self.dropoff_complete = True
-            self.get_logger().info("Dropoff complete, returning to mission mode")
             self.state = MissionState.OFFBOARD_TO_MISSION
 
-    def _handle_landing_tag_track(self):
-        """Track landing target (ArUco tag) using CV/ArUco"""
-        
-        if self.target is None:
-            self.get_logger().warn("No target coordinates available, waiting for CV detection")
-            return
-        
-        next_setpoint, arrived = self.drone_target_controller.update(self.pos, self.yaw, self.target.angle_x, self.target.angle_y)
-        self.publish_setpoint(pos_sp=next_setpoint)
-        
-        if arrived:
-            self.state = MissionState.FINAL_DESCEND
+    
 
     def _handle_final_descend(self):
         """Descend for landing"""
@@ -384,7 +345,9 @@ class MissionController(PX4BaseController):
 
         # Log current vehicle state
         auto_flag = 0 if self.state is MissionState.INIT else 1
-        event_flag = self.mission_wp_num if self.is_mission_mode() else 0
+        
+        # TODO: Set event_flag in accordance with mission regulations
+        event_flag = self.mission_wp_num 
         
         gps_time = self.vehicle_gps.time_utc_usec / 1e6  # Convert microseconds to seconds
         lat = self.vehicle_gps.latitude_deg
@@ -392,11 +355,6 @@ class MissionController(PX4BaseController):
         alt = self.vehicle_gps.altitude_ellipsoid_m
 
         self.logger.log_data(auto_flag, event_flag, gps_time, lat, long, alt)
-
-
-    def set_casualty_coordinates(self, x, y):
-        """Set casualty coordinates from external CV/ArUco system"""
-        self.casualty_coordinates = [x, y]
 
     def on_vehicle_status_update(self, msg):
         """Override to handle vehicle status updates"""
