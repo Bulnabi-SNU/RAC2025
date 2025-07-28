@@ -191,13 +191,10 @@ class ImageProcessor(Node):
                 if self.vehicle_state.detect_target_type == 0:
                     return  # Skip processing if no detection is required
                 elif self.vehicle_state.detect_target_type == 1:
-                    self.cx = self.detection_cs.cx
-                    self.cy = self.detection_cs.cy
+                    self.cx = self.detection_cs['pixel_x']
+                    self.cy = self.detection_cs['pixel_y']
                 elif self.vehicle_state.detect_target_type == 2:
-                    x, y, z, yaw, angle_x, angle_y = self.detection_dt
-                    pixel_coords = self.K @ np.array([x, y, z], dtype=np.float64)
-                    self.cx = pixel_coords[0] / pixel_coords[2]
-                    self.cy = pixel_coords[1] / pixel_coords[2]
+                    self.cx, self.cy = self.detection_dt['pixel_center']
                 elif self.vehicle_state.detect_target_type == 3:
                     x, y, z, yaw, angle_x, angle_y = self.detection_lt
                     pixel_coords = self.K @ np.array([x, y, z], dtype=np.float64)
@@ -208,7 +205,7 @@ class ImageProcessor(Node):
                 cv2.circle(self.last_image, (self.cx, self.cy), 5, (0, 0, 255), -1)
                 # show image to monitor
                 cv2.imshow("Image Processor", self.last_image)
-                
+
 
     #============================================
     # "Subscriber" Callback Functions
