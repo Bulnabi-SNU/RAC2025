@@ -2,4 +2,5 @@ log/
 build/
 install/
 __pycache__/
+flight_logs/*
 .devcontainer.json
