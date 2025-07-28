@@ -131,6 +131,13 @@ class PX4BaseController(Node, ABC):
             self._vehicle_global_position_callback,
             self.qos_profile,
         )
+        
+        self.vehicle_gps_subscriber = self.create_subscription(
+            SensorGps,
+            "/fmu/out/vehicle_gps_position",
+            self._vehicle_gps_callback,
+            self.qos_profile,
+        )
 
         self.vehicle_mission_subscriber = self.create_subscription(
             MissionResult,
@@ -221,6 +228,13 @@ class PX4BaseController(Node, ABC):
         self.on_global_position_update(msg)
         if self.get_position_flag and self.home_set_flag:
             self.pos = self.pos - self.home_position
+
+    def _vehicle_gps_callback(self, msg):
+        """Callback for GPS updates"""
+        if msg.fix_type >= 3:
+            self.vehicle_gps = msg
+        else:
+            self.get_logger().warn("GPS fix type is less than 3, no valid GPS data")          
 
     def _mission_result_callback(self, msg):
         self.mission_result = msg
