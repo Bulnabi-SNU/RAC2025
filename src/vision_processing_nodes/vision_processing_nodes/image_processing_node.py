@@ -41,6 +41,17 @@ class ImageProcessor(Node):
 
     def __init__(self, use_gazebo=False):
         super().__init__('image_processor_node')
+
+        """
+        -1. set camera info
+        : real camera or Gazebo camera
+        """
+        if use_gazebo:
+            self.topicNameFrames = "/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image"     # Change to for real camera'topic_camera_image'
+        else:
+            self.topicNameFrames = "topic_camera_image"  # Change to for real camera'topic_camera_image'
+        
+
         """
         0. Configure QoS profile for publishing and subscribing
         : communication settings with px4
@@ -82,13 +93,16 @@ class ImageProcessor(Node):
         # DropTag 일시정지 상태 관리
         self.drop_tag_paused = False
 
-        self.bridge = CvBridge()
+        self.detection_dt = None  # DropTag detection result
 
-        if use_gazebo:
-            self.topicNameFrames = "/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image"     # Change to for real camera'topic_camera_image'
-        else:
-            self.topicNameFrames = "topic_camera_image"  # Change to for real camera'topic_camera_image'
-        
+        """ landing tag """
+        self.detection_lt = None  # Landing Tag detection result
+
+        """ casualty """
+        self.detection_cs = None  # Casualty detection result
+
+        """ camera configuration """
+        self.bridge = CvBridge()
         self.queueSize=20
         self.last_image = None
 
@@ -119,6 +133,7 @@ class ImageProcessor(Node):
         # [Timers]
         timer_period = 0.05
         self.main_timer = self.create_timer(timer_period, self.main_timer_callback)
+        self.streaming_timer = self.create_timer(0.1, self.streaming_timer_callback)
 
         '''
         2. Instantiating Different Detectors
@@ -162,12 +177,38 @@ class ImageProcessor(Node):
             self.publish_casualty_location()
         elif self.vehicle_state.detect_target_type == 2:
             # DropTag 감지 및 중심으로 이동
-            self.publish_casualty_dropoff_location()
+            self.publish_droptag_location()
         elif self.vehicle_state.detect_target_type == 3:
             # Landing Tag 감지 및 중심으로 이동
             self.publish_landing_tag_location()
+    
+    
+    def streaming_timer_callback(self):
+        if self.last_image is None:
+            self.get_logger().warn("No image received yet, skipping processing")
+            return
+        else:
+                if self.vehicle_state.detect_target_type == 0:
+                    return  # Skip processing if no detection is required
+                elif self.vehicle_state.detect_target_type == 1:
+                    self.cx = self.detection_cs.cx
+                    self.cy = self.detection_cs.cy
+                elif self.vehicle_state.detect_target_type == 2:
+                    x, y, z, yaw, angle_x, angle_y = self.detection_dt
+                    pixel_coords = self.K @ np.array([x, y, z], dtype=np.float64)
+                    self.cx = pixel_coords[0] / pixel_coords[2]
+                    self.cy = pixel_coords[1] / pixel_coords[2]
+                elif self.vehicle_state.detect_target_type == 3:
+                    x, y, z, yaw, angle_x, angle_y = self.detection_lt
+                    pixel_coords = self.K @ np.array([x, y, z], dtype=np.float64)
+                    self.cx = pixel_coords[0] / pixel_coords[2]
+                    self.cy = pixel_coords[1] / pixel_coords[2]
 
-
+                # draw red circle at (cx, cy) in image
+                cv2.circle(self.last_image, (self.cx, self.cy), 5, (0, 0, 255), -1)
+                # show image to monitor
+                cv2.imshow("Image Processor", self.last_image)
+                
 
     #============================================
     # "Subscriber" Callback Functions
@@ -187,15 +228,14 @@ class ImageProcessor(Node):
         if self.last_image is None:
             self.get_logger().warn("No image received in LandingTagDetector.")
             return
-            
-        detection = self.landing_tag_detector.detect_landing_tag(self.last_image)
-        if detection[0] == -1:
+        self.detection_lt = self.landing_tag_detector.detect_landing_tag(self.last_image)
+        if self.detection_lt[0] == -1:
             self.get_logger().warn("No apriltags detected")
             return
-        if detection[0] == -2:
+        if self.detection_lt[0] == -2:
             self.get_logger().warn("Pose estimation failed")
             return
-        x, y, z, yaw, angle_x, angle_y = detection
+        x, y, z, yaw, angle_x, angle_y = self.detection_lt
         pos_msg = TargetLocation()
         pos_msg.x = x                                   # x coordinate of the object's center position relative to the screen
         pos_msg.y = y                                   # y coordinate of the object's center position relative to the screen
@@ -214,8 +254,7 @@ class ImageProcessor(Node):
 
     # ====== 바구니(오렌지색) HSV 캘리브레이션 범위 & 최소 면적 ======
     def publish_casualty_location(self):
-        detection = self.casualty_detector.detect_casualty_with_angles(self.last_image)
-       
+        self.detection_cs = self.casualty_detector.detect_casualty_with_angles(self.last_image)
         
         pos_msg = TargetLocation()
         pos_msg.x = float('nan')
@@ -224,10 +263,10 @@ class ImageProcessor(Node):
         pos_msg.yaw = float('nan')
         pos_msg.angle_x = float('nan')
         pos_msg.angle_y = float('nan')
-        if detection is not None:
-            pos_msg.angle_x = detection['angle_x']
-            pos_msg.angle_y = detection['angle_y']
-        
+        if self.detection_cs is not None:
+            pos_msg.angle_x = self.detection_cs['angle_x']
+            pos_msg.angle_y = self.detection_cs['angle_y']
+
          # Set angular coordinates from detection        
         self.target_pub.publish(pos_msg)
         self.get_logger().info(f"Publishing target location: angle_x={pos_msg.angle_x:.2f}, angle_y={pos_msg.angle_y:.2f}") #optional
@@ -236,7 +275,7 @@ class ImageProcessor(Node):
     # DropTag Related Functions
     #============================================ 
 
-    def publish_casualty_dropoff_location(self):
+    def publish_droptag_location(self):
         """
         Detect and publish DropTag location using DropTagDetector
         Includes pause/resume logic based on red pixel ratio
@@ -260,18 +299,18 @@ class ImageProcessor(Node):
             return
         
         # Perform detection using the detector
-        detection = self.droptag_detector.detect_droptag_with_position(self.last_image)
-        
-        if detection is not None:
+        self.detection_dt = self.droptag_detector.detect_droptag_with_position(self.last_image)
+
+        if self.detection_dt is not None:
             # Update state tracking
             self.drop_tag_detected = True
-            self.drop_tag_center = detection['pixel_center']
-            self.drop_tag_confidence = detection['confidence']
-            
+            self.drop_tag_center = self.detection_dt['pixel_center']
+            self.drop_tag_confidence = self.detection_dt['confidence']
+
             # Extract position data
-            real_x, real_y, distance = detection['real_position']
-            angle_x, angle_y = detection['angles']
-            
+            real_x, real_y, distance = self.detection_dt['real_position']
+            angle_x, angle_y = self.detection_dt['angles']
+
             # Create and publish ROS message
             pos_msg = TargetLocation()
             pos_msg.x = real_x          # Real-world x position (meters)
@@ -284,7 +323,7 @@ class ImageProcessor(Node):
             self.target_pub.publish(pos_msg)
             
             # Log detection info
-            confidence = detection['confidence']
+            confidence = self.detection_dt['confidence']
             self.get_logger().info(
                 f"DropTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), "
                 f"Confidence: {confidence:.2f}, Angle: ({angle_x:.2f}, {angle_y:.2f})"
