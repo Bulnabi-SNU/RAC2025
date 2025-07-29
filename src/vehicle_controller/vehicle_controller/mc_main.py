@@ -62,16 +62,18 @@ class MissionController(PX4BaseController):
         # External data placeholders
         self.target = None
         
+        # Offboard params - use position mode for now
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
 
         # State machine
-        self.state = MissionState.INIT  # Initial state
+        self.state = MissionState.CASUALTY_TRACK  # Initial state
         self.mission_paused_waypoint = 0
         self.pickup_complete = False
         self.dropoff_complete = False
         
         # Logger
+        self.doLogging = False
         self.logger = Logger(log_path="./flight_logs/")
         
         # Offboard controller
@@ -199,8 +201,9 @@ class MissionController(PX4BaseController):
         else:
             self.get_logger().info("Armed in offboard mode, starting logger")
             
-            self.logger.start_logging()
-            self.log_timer = self.create_timer(0.1, self._log_timer_callback)
+            if self.doLogging:
+                self.logger.start_logging()
+                self.log_timer = self.create_timer(0.1, self._log_timer_callback)
             
             self.state = MissionState.OFFBOARD_TO_MISSION
 
@@ -284,8 +287,8 @@ class MissionController(PX4BaseController):
 
         # TODO: Add logic to check if this state is complete
         if True:
-            self.dropoff_complete = True
-            self.state = MissionState.DROP_TAG_ASCEND
+            self.pickup_complete = True
+            self.state = MissionState.CASUALTY_ASCEND
 
     def _handle_gripper_open(self):
         """Open gripper to release casualty at dropoff point"""
@@ -305,8 +308,6 @@ class MissionController(PX4BaseController):
 
         if abs(self.pos[2] - self.mission_altitude) < 0.2:
             self.state = MissionState.OFFBOARD_TO_MISSION
-
-    
 
     def _handle_final_descend(self):
         """Descend for landing"""
@@ -340,8 +341,8 @@ class MissionController(PX4BaseController):
     def _log_timer_callback(self):
         """Timer callback to log vehicle data"""
         if self.logger is None:
-            self.logger = Logger()
-            self.logger.start_logging()
+            self.get_logger().warn("logger called while not initalized")
+            return
 
         # Log current vehicle state
         auto_flag = 0 if self.state is MissionState.INIT else 1

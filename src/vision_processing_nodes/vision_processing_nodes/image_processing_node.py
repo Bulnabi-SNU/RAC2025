@@ -31,6 +31,7 @@ from cv_bridge import CvBridge #helps convert ros2 images to OpenCV formats
 from vision_processing_nodes.detection.landingtag import LandingTagDetector
 from vision_processing_nodes.detection.casualty import CasualtyDetector
 from vision_processing_nodes.detection.droptag import DropTagDetector
+
 from vision_processing_nodes.detection.utils import pixel_to_fov
 
 class ImageProcessor(Node):
@@ -51,7 +52,6 @@ class ImageProcessor(Node):
         else:
             self.topicNameFrames = "topic_camera_image"  # Change to for real camera'topic_camera_image'
         
-
         """
         0. Configure QoS profile for publishing and subscribing
         : communication settings with px4
@@ -73,48 +73,20 @@ class ImageProcessor(Node):
                 depth=1
             )
         else:
-            image_qos_profile = QoSProfile(
-                reliability=ReliabilityPolicy.BEST_EFFORT,
-                durability=DurabilityPolicy.TRANSIENT_LOCAL,   # Change back to TRANSIENT_LOCAL for actual test
-                history=HistoryPolicy.KEEP_LAST,
-                depth=1
-            )
+            image_qos_profile = qos_profile
 
-        # Lines for System Initialization
-        #self.phase = None
-
-        """ for VehiclePhase callback"""
+        """ for VehicleState callback"""
         self.vehicle_state = VehicleState()
+        
+        """ for tracking detection states"""
+        self.detection_status = -1
+        self.detection_cx = 0
+        self.detection_cy = 0
 
-        """ drop tag """
-        self.drop_tag_detected = False
-        self.drop_tag_center = None
-        self.drop_tag_confidence = 0.0
-        # DropTag 일시정지 상태 관리
-        self.drop_tag_paused = False
-
-        self.detection_dt = None  # DropTag detection result
-
-        """ landing tag """
-        self.detection_lt = None  # Landing Tag detection result
-
-        """ casualty """
-        self.detection_cs = None  # Casualty detection result
-
-        """ camera configuration """
+        """ CVBridge configuration """
         self.bridge = CvBridge()
         self.queueSize=20
         self.last_image = None
-
-        # Camera intrinsics
-        self.K = np.array([
-                            [1070.089695, 0.0, 1045.772015],
-                            [0.0, 1063.560096, 566.257075],
-                            [0.0, 0.0, 1.0]
-                        ], dtype=np.float64)
-        # Camera distortion coefficients
-        self.D = np.array([-0.090292, 0.052332, 0.000171, 0.006618, 0.0], dtype=np.float64)
-        self.tag_size=0.5
 
         """
         1. Subscribers & Publishers & Timers
@@ -131,19 +103,14 @@ class ImageProcessor(Node):
         self.target_pub = self.create_publisher(TargetLocation, '/target_position', qos_profile)
 
         # [Timers]
-        timer_period = 0.05
-        self.main_timer = self.create_timer(timer_period, self.main_timer_callback)
-        self.streaming_timer = self.create_timer(0.1, self.streaming_timer_callback)
+        self.timer_period = 0.05
+        self.streaming_period = 0.1
+        self.main_timer = self.create_timer(self.timer_period, self.main_timer_callback)
+        # self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
         '''
         2. Instantiating Different Detectors
         '''
-        # [Landing Tag Detector]
-        self.landing_tag_detector = LandingTagDetector(
-            tag_size=self.tag_size,       
-            K=self.K,                     
-            D=self.D,                    
-        )
 
         # [Casualty Detector]
         self.casualty_detector = CasualtyDetector(
@@ -153,7 +120,7 @@ class ImageProcessor(Node):
         )
 
         # [DropTag Detector]
-        self.droptag_detector = DropTagDetector(
+        self.drop_tag_detector = DropTagDetector(
             lower_red1=np.array([0, 100, 50]),
             upper_red1=np.array([10, 255, 255]),
             lower_red2=np.array([170, 100, 50]),
@@ -162,50 +129,62 @@ class ImageProcessor(Node):
             pause_threshold=0.4
         )
 
+        # [Landing Tag Detector]
+        self.landing_tag_detector = LandingTagDetector(
+            tag_size=0.5,       
+            K=np.array([
+                            [1070.089695, 0.0, 1045.772015],
+                            [0.0, 1063.560096, 566.257075],
+                            [0.0, 0.0, 1.0]
+                        ], dtype=np.float64),                     
+            D=np.array([-0.090292, 0.052332, 0.000171, 0.006618, 0.0], dtype=np.float64),                    
+        )
+        
     #============================================
     # "Timer" Callback Functions
     #============================================     
 
     def main_timer_callback(self):
+        # Assume no detection unless proven otherwise
+        self.detection_status = -1
+        
         if self.last_image is None:
             self.get_logger().warn("No image received yet, skipping processing")
             return
+        
         if self.vehicle_state.detect_target_type == 0:
             return  # Skip processing if no detection is required
         elif self.vehicle_state.detect_target_type == 1:
             # Casualty 감지 및 중심으로 이동
-            self.publish_casualty_location()
+            self.detect_casualty()
         elif self.vehicle_state.detect_target_type == 2:
             # DropTag 감지 및 중심으로 이동
-            self.publish_droptag_location()
+            self.detect_drop_tag()
         elif self.vehicle_state.detect_target_type == 3:
             # Landing Tag 감지 및 중심으로 이동
-            self.publish_landing_tag_location()
-    
+            self.detect_landing_tag()
+        
+        h, w, _ = self.last_image.shape
+        
+        targetLocation = TargetLocation()
+        targetLocation.status = self.detection_status
+        targetLocation.angle_x, targetLocation.angle_y = \
+            pixel_to_fov(self.detection_cx,self.detection_cy,w,h,81,93)
+        
+        self.target_pub.publish(targetLocation)
     
     def streaming_timer_callback(self):
         if self.last_image is None:
             self.get_logger().warn("No image received yet, skipping processing")
             return
-        else:
-                if self.vehicle_state.detect_target_type == 0:
-                    return  # Skip processing if no detection is required
-                elif self.vehicle_state.detect_target_type == 1:
-                    self.cx = self.detection_cs['pixel_x']
-                    self.cy = self.detection_cs['pixel_y']
-                elif self.vehicle_state.detect_target_type == 2:
-                    self.cx, self.cy = self.detection_dt['pixel_center']
-                elif self.vehicle_state.detect_target_type == 3:
-                    x, y, z, yaw, angle_x, angle_y = self.detection_lt
-                    pixel_coords = self.K @ np.array([x, y, z], dtype=np.float64)
-                    self.cx = pixel_coords[0] / pixel_coords[2]
-                    self.cy = pixel_coords[1] / pixel_coords[2]
+        
+        output_image = self.last_image.copy()
+        
+        self.render_image(output_image)
 
-                # draw red circle at (cx, cy) in image
-                cv2.circle(self.last_image, (self.cx, self.cy), 5, (0, 0, 255), -1)
-                # show image to monitor
-                cv2.imshow("Image Processor", self.last_image)
-
+        # show image to monitor
+        cv2.imshow("Image Processor", output_image)
+        print(self.last_image)
 
     #============================================
     # "Subscriber" Callback Functions
@@ -218,126 +197,60 @@ class ImageProcessor(Node):
     def image_callback(self, msg):
         self.last_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
+    # TODO maybe add additional logic by-case
     #============================================
-    # Landing Tag (AprilTag) Publisher
+    # Detection Related Functions
     #============================================ 
-    def publish_landing_tag_location(self):
-        if self.last_image is None:
-            self.get_logger().warn("No image received in LandingTagDetector.")
-            return
-        self.detection_lt = self.landing_tag_detector.detect_landing_tag(self.last_image)
-        if self.detection_lt[0] == -1:
-            self.get_logger().warn("No apriltags detected")
-            return
-        if self.detection_lt[0] == -2:
-            self.get_logger().warn("Pose estimation failed")
-            return
-        x, y, z, yaw, angle_x, angle_y = self.detection_lt
-        pos_msg = TargetLocation()
-        pos_msg.x = x                                   # x coordinate of the object's center position relative to the screen
-        pos_msg.y = y                                   # y coordinate of the object's center position relative to the screen
-        pos_msg.z = z                                   # distance of the object's center position relative to the camera
-        pos_msg.yaw = yaw                               # angle deviation away from proper alignment 
-        pos_msg.angle_x = angle_x
-        pos_msg.angle_y = angle_y
+    
+    def detect_casualty(self):
         
-        self.target_pub.publish(pos_msg)
-        self.get_logger().info(f"Publishing landing tag location: x={x:.2f}, y={y:.2f}, z={z:.2f}, yaw={yaw:.2f}, angle_x={angle_x:.2f}, angle_y={angle_y:.2f}")
-  
-
-    #============================================
-    # Casualty (Basket) Publisher
-    #============================================ 
-
-    # ====== 바구니(오렌지색) HSV 캘리브레이션 범위 & 최소 면적 ======
-    def publish_casualty_location(self):
-        self.detection_cs = self.casualty_detector.detect_casualty_with_angles(self.last_image)
+        detection, _ =  self.casualty_detector.detect_casualty(self.last_image)
         
-        pos_msg = TargetLocation()
-        pos_msg.x = float('nan')
-        pos_msg.y = float('nan')
-        pos_msg.z = float('nan')
-        pos_msg.yaw = float('nan')
-        pos_msg.angle_x = float('nan')
-        pos_msg.angle_y = float('nan')
-        if self.detection_cs is not None:
-            pos_msg.angle_x = self.detection_cs['angle_x']
-            pos_msg.angle_y = self.detection_cs['angle_y']
-
-         # Set angular coordinates from detection        
-        self.target_pub.publish(pos_msg)
-        self.get_logger().info(f"Publishing target location: angle_x={pos_msg.angle_x:.2f}, angle_y={pos_msg.angle_y:.2f}") #optional
-
-    #============================================
-    # DropTag Related Functions
-    #============================================ 
-
-    def publish_droptag_location(self):
-        """
-        Detect and publish DropTag location using DropTagDetector
-        Includes pause/resume logic based on red pixel ratio
-        """
-        if self.last_image is None:
+        if detection is None:
+            self.detection_status = -1
             return
         
-        # Check if detection should be paused
-        should_pause, red_ratio, screen_center = self.droptag_detector.should_pause_detection(self.last_image)
-        state_changed, is_paused = self.droptag_detector.update_pause_state(should_pause)
+        self.detection_status = 0
+        self.detection_cx = detection[0]
+        self.detection_cy = detection[1]
+
+    def detect_drop_tag(self):
+
+        detection, _ =  self.drop_tag_detector.detect_drop_tag(self.last_image)
         
-        # Log pause state changes
-        if state_changed:
-            if is_paused:
-                self.get_logger().info(f"DropTag detection paused. Center: {screen_center}")
-            else:
-                self.get_logger().info("DropTag detection resumed.")
-        
-        # Skip detection if paused
-        if is_paused:
+        if detection is None:
+            self.detection_status = -1
             return
         
-        # Perform detection using the detector
-        self.detection_dt = self.droptag_detector.detect_droptag_with_position(self.last_image)
+        self.detection_status = 0
+        self.detection_cx = detection[0]
+        self.detection_cy = detection[1]
 
-        if self.detection_dt is not None:
-            # Update state tracking
-            self.drop_tag_detected = True
-            self.drop_tag_center = self.detection_dt['pixel_center']
-            self.drop_tag_confidence = self.detection_dt['confidence']
-
-            # Extract position data
-            real_x, real_y, distance = self.detection_dt['real_position']
-            angle_x, angle_y = self.detection_dt['angles']
-
-            # Create and publish ROS message
-            pos_msg = TargetLocation()
-            pos_msg.x = real_x          # Real-world x position (meters)
-            pos_msg.y = real_y          # Real-world y position (meters)
-            pos_msg.z = distance        # Distance to target (meters)
-            pos_msg.yaw = float('nan')  # Orientation not calculated
-            pos_msg.angle_x = angle_x   # Angular position in FOV
-            pos_msg.angle_y = angle_y   # Angular position in FOV
+    def detect_landing_tag(self):
+        
+        detection, _ = self.landing_tag_detector.detect_landing_tag(self.last_image)
+        
+        if detection is None:
+            self.detection_status = -1
+            return
+        
+        if _ is None:
+            # Set detection_status to -2 if pose isn't calculated
+            # For now just assume it's all fine.
+            pass
             
-            self.target_pub.publish(pos_msg)
-            
-            # Log detection info
-            confidence = self.detection_dt['confidence']
-            self.get_logger().info(
-                f"DropTag detected! Real position: ({real_x:.3f}, {real_y:.3f}, {distance:.3f}), "
-                f"Confidence: {confidence:.2f}, Angle: ({angle_x:.2f}, {angle_y:.2f})"
-            )
-        else:
-            # Update state for no detection
-            self.drop_tag_detected = False
-            pos_msg = TargetLocation()
-            pos_msg.x = float('nan')
-            pos_msg.y = float('nan')
-            pos_msg.z = float('nan')
-            pos_msg.yaw = float('nan')
-            pos_msg.angle_x = float('nan')
-            pos_msg.angle_y = float('nan')
-            self.target_pub.publish(pos_msg)
-            # Optional: Log no detection (might be too verbose)
-            # self.get_logger().info("DropTag not detected")
+        self.detection_status = 0
+        self.cx = detection[0]
+        self.cy = detection[1]
+        
+    """ Function to render shapes/text onto camera feed before streaming """
+    def render_image(self, image):
+        if self.detection_status == 0:
+            cv2.circle(image, 
+                    (self.detection_cx, self.detection_cy), 
+                    5, (0, 0, 255), -1)
+        # Blahblah write state on top left etc.etc.etc.
+
 
 #============================================
 # Main Function

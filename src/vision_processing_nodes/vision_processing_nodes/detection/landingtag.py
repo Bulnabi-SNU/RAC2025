@@ -9,19 +9,8 @@ Outputs relative position of detected object
 __author__ = "tkweon426"
 __contact__ = "tkweon426@snu.ac.kr"
 
-import os, math
 import numpy as np
 import cv2
-from cv_bridge import CvBridge #helps convert ros2 images to OpenCV formats
-
-# import custom msg
-'''msgs for subscription to phase'''
-from custom_msgs.msg import VehicleState  
-'''msgs for publishing positions'''
-from custom_msgs.msg import TargetLocation  
-
-# import utilities functions
-from .utils import pixel_to_fov
 
 class LandingTagDetector:
     def __init__(self, tag_size, K, D):
@@ -32,7 +21,7 @@ class LandingTagDetector:
 
     def detect_landing_tag(self, image): #to-do
         if image is None:
-            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
+            return None, None
         
         # Opencv aruco settings for apriltag detection
         dictionary   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
@@ -45,12 +34,14 @@ class LandingTagDetector:
         # 태그 검출
         corners, ids, rejected = detector.detectMarkers(gray_image)
         if ids is None or len(ids) == 0:
-            return np.array([-1,0,0,0,0,0]) # detection fail, return -1
+            return None, None
         
         # 일단 그냥 첫번째 태그 사용, 나중에 위에처럼 수정
         img_pts = corners[0].reshape(-1, 2).astype(np.float32)  # (4,2)
         tag_center = np.mean(img_pts, axis=0)  # (2,)
 
+        # =========== This is the end of basic image detection, the latter is not 100% necessary =======
+        
         # solvePnP용 3D 좌표계 정의 (april_tag 좌표계 만드는 코드)
         s = self.tag_size / 2.0
         obj_pts = np.array([[-s,  s, 0],
@@ -68,7 +59,7 @@ class LandingTagDetector:
                                         self.K, self.D,
                                         flags=cv2.SOLVEPNP_ITERATIVE)
         if not success:
-            return np.array([-2,0,0,0,0,0]) # pose estimate fail, return -2
+            return np.array([tag_center[0],tag_center[1]]), None # pose estimate fail, don't return additional info
 
         # Compute Rotation matrix and its inverse for camera position calculation
         R, _ = cv2.Rodrigues(rvec)
@@ -87,18 +78,9 @@ class LandingTagDetector:
         y = tag_pose_camera_frame[1]
         z = tag_pose_camera_frame[2]
         
-        angle_x, angle_y = pixel_to_fov(
-            tag_center[0], tag_center[1],
-            image.shape[1], image.shape[0]
-        )
-        
-        return np.array([x,y,z,yaw,angle_x,angle_y])
+        return np.array([tag_center[0],tag_center[1]]), np.array([x,y,z,yaw])
 
 if __name__ == "__main__":
-    # Test code with proper dependency injection
-    import cv2
-    import numpy as np
-
     # === Define dummy calibration (replace with your real values) ===
     K = np.array([
         [1070.089695, 0.0, 1045.772015],
@@ -123,11 +105,15 @@ if __name__ == "__main__":
             break
 
         # Clean interface: pass image, get result
-        detection = detector.detect_landing_tag(frame)
+        detection, additional = detector.detect_landing_tag(frame)
         
-        if detection[0] >= 0:  # Success
-            x, y, z, yaw, angle_x, angle_y = detection
-            print(f"Landing tag detected: x={x:.2f}, y={y:.2f}, z={z:.2f}")
+        if detection != None:  # Success
+            cx, cy = detection[0],detection[1]
+            cv2.circle(frame, (cx, cy), 10, (0, 0, 255), 2)
+            
+            if additional != None:
+                x, y, z, yaw = additional
+                print(f"Landing tag detected: x={x:.2f}, y={y:.2f}, z={z:.2f}")
 
         cv2.imshow("LandingTag Detection", frame)
         if cv2.waitKey(30) & 0xFF == ord('q'):
