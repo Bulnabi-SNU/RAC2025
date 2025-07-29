@@ -34,8 +34,15 @@ class MissionState(Enum):
 class MissionController(PX4BaseController):
 
     def __init__(self):
-        super().__init__("mc_main")
+        super().__init__("mc_test_04")
 
+
+
+        # Mission parameters
+        self.gripper_altitude = 0.3  # altitude for pickup/dropoff operations
+        self.track_min_altitude = -4.0 # minimum altitude for tracking - just go down without tracking from here
+        self.mission_altitude = -15.0  # normal mission altitude
+        
         # External data placeholders
         self.target = None
         
@@ -76,7 +83,7 @@ class MissionController(PX4BaseController):
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=1
+                detect_target_type=3
                 ),
             )
 
@@ -99,8 +106,8 @@ class MissionController(PX4BaseController):
             return
 
         self.set_home_position()
-        if self.home_set_flag:
-            self.get_logger().info("Home position set, ready for offboard mode")
+        if self.home_set_flag and self.is_offboard_mode():
+            self.get_logger().info("Starting to track")
             self.state = MissionState.TRACK
 
     def _handle_track_target(self, nextState: MissionState):
@@ -112,6 +119,7 @@ class MissionController(PX4BaseController):
         next_setpoint, arrived = self.drone_target_controller.update(
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
         )
+        self.get_logger().info(f"{self.target.angle_x}, {self.target.angle_y} ")
         self.publish_setpoint(pos_sp=next_setpoint)
 
         if arrived:
