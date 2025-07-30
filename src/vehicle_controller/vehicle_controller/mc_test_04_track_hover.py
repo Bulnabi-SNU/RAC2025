@@ -105,8 +105,7 @@ class MissionController(PX4BaseController):
             self.get_logger().info("Waiting for position data...")
             return
 
-        self.set_home_position()
-        if self.home_set_flag and self.is_offboard_mode():
+        if self.is_offboard_mode():
             self.get_logger().info("Starting to track")
             self.state = MissionState.TRACK
 

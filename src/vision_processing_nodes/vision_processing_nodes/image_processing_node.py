@@ -106,6 +106,7 @@ class ImageProcessor(Node):
         self.timer_period = 0.05
         self.streaming_period = 0.1
         self.main_timer = self.create_timer(self.timer_period, self.main_timer_callback)
+
         # self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
         '''
@@ -169,7 +170,7 @@ class ImageProcessor(Node):
         targetLocation = TargetLocation()
         targetLocation.status = self.detection_status
         targetLocation.angle_x, targetLocation.angle_y = \
-            pixel_to_fov(self.detection_cx,self.detection_cy,w,h,81,93)
+            pixel_to_fov(self.detection_cx, self.detection_cy, w, h,81,93)
         
         self.target_pub.publish(targetLocation)
     
@@ -240,8 +241,8 @@ class ImageProcessor(Node):
             pass
             
         self.detection_status = 0
-        self.cx = detection[0]
-        self.cy = detection[1]
+        self.detection_cx = detection[0]
+        self.detection_cy = detection[1]
         
     """ Function to render shapes/text onto camera feed before streaming """
     def render_image(self, image):
