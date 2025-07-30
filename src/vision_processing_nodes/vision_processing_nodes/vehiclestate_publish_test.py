@@ -26,8 +26,8 @@ class VehicleStatePublisher(Node):
 
         # Message to publish
         self.test_state = VehicleState()
-        self.test_state.vehicle_state = "Droptag"
-        self.test_state.detect_target_type = 2  # 0: none, 1: casualty, 2: dropoff, 3: apriltag
+        self.test_state.vehicle_state = "Apriltag"
+        self.test_state.detect_target_type = 3  # 0: none, 1: casualty, 2: dropoff, 3: apriltag
 
         self.get_logger().info("VehicleState test publisher initialized.")
 

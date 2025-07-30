@@ -106,7 +106,7 @@ class ImageProcessor(Node):
         self.timer_period = 0.05
         self.streaming_period = 0.1
         self.main_timer = self.create_timer(self.timer_period, self.main_timer_callback)
-        # self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
+        self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
         '''
         2. Instantiating Different Detectors
@@ -156,13 +156,13 @@ class ImageProcessor(Node):
             return  # Skip processing if no detection is required
         elif self.vehicle_state.detect_target_type == 1:
             # Casualty 감지 및 중심으로 이동
-            self.detect_casualty()
+            self.handle_detect_casualty()
         elif self.vehicle_state.detect_target_type == 2:
             # DropTag 감지 및 중심으로 이동
-            self.detect_drop_tag()
+            self.handle_detect_drop_tag()
         elif self.vehicle_state.detect_target_type == 3:
             # Landing Tag 감지 및 중심으로 이동
-            self.detect_landing_tag()
+            self.handle_detect_landing_tag()
         
         h, w, _ = self.last_image.shape
         
@@ -184,7 +184,8 @@ class ImageProcessor(Node):
 
         # show image to monitor
         cv2.imshow("Image Processor", output_image)
-        print(self.last_image)
+        cv2.waitKey(1)  # ✅ Add this for proper OpenCV window handling
+        #print(self.last_image)
 
     #============================================
     # "Subscriber" Callback Functions
@@ -202,7 +203,7 @@ class ImageProcessor(Node):
     # Detection Related Functions
     #============================================ 
     
-    def detect_casualty(self):
+    def handle_detect_casualty(self):
         
         detection, _ =  self.casualty_detector.detect_casualty(self.last_image)
         
@@ -211,10 +212,10 @@ class ImageProcessor(Node):
             return
         
         self.detection_status = 0
-        self.detection_cx = detection[0]
-        self.detection_cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
 
-    def detect_drop_tag(self):
+    def handle_detect_drop_tag(self):
 
         detection, _ =  self.drop_tag_detector.detect_drop_tag(self.last_image)
         
@@ -223,10 +224,10 @@ class ImageProcessor(Node):
             return
         
         self.detection_status = 0
-        self.detection_cx = detection[0]
-        self.detection_cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
 
-    def detect_landing_tag(self):
+    def handle_detect_landing_tag(self):
         
         detection, _ = self.landing_tag_detector.detect_landing_tag(self.last_image)
         
@@ -240,8 +241,8 @@ class ImageProcessor(Node):
             pass
             
         self.detection_status = 0
-        self.cx = detection[0]
-        self.cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
         
     """ Function to render shapes/text onto camera feed before streaming """
     def render_image(self, image):
