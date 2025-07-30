@@ -67,7 +67,7 @@ class MissionController(PX4BaseController):
         self.offboard_control_mode_params["velocity"] = False
 
         # State machine
-        self.state = MissionState.CASUALTY_TRACK  # Initial state
+        self.state = MissionState.INIT  # Initial state
         self.mission_paused_waypoint = 0
         self.pickup_complete = False
         self.dropoff_complete = False
