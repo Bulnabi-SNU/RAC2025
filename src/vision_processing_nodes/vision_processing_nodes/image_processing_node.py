@@ -183,9 +183,10 @@ class ImageProcessor(Node):
         self.render_image(output_image)
 
         # show image to monitor
-        cv2.imshow("Image Processor", output_image)
-        cv2.waitKey(1)  # ✅ Add this for proper OpenCV window handling
-        #print(self.last_image)
+        resized_frame = cv2.resize(output_image, (960, 540))
+        cv2.imshow("Image Processor", resized_frame)
+        cv2.waitKey(1)  
+        #print(self.last_image) 
 
     #============================================
     # "Subscriber" Callback Functions
@@ -246,11 +247,45 @@ class ImageProcessor(Node):
         
     """ Function to render shapes/text onto camera feed before streaming """
     def render_image(self, image):
+        h, w, _ = image.shape
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        font_thickness = 1
+        text_color = (255, 255, 255)
+        bg_color = (0, 0, 0)
+
+        center_x, center_y = w // 2, h // 2
+        cv2.line(image, (center_x - 20, center_y), (center_x + 20, center_y), (0, 255, 0), 2)
+        cv2.line(image, (center_x, center_y - 20), (center_x, center_y + 20), (0, 255, 0), 2)
+
         if self.detection_status == 0:
             cv2.circle(image, 
                     (self.detection_cx, self.detection_cy), 
                     5, (0, 0, 255), -1)
-        # Blahblah write state on top left etc.etc.etc.
+            angle_x, angle_y = pixel_to_fov(
+                self.detection_cx, self.detection_cy, w, h, 81, 93
+            )
+
+            detect_type_label = {
+                1: "Casualty",
+                2: "DropTag",
+                3: "LandingTag"
+            }.get(self.vehicle_state.detect_target_type, "Unknown")
+
+            info_lines = [
+                f"Detection Mode : {detect_type_label}",
+                f"Pixel (x, y)   : ({self.detection_cx}, {self.detection_cy})",
+                f"Angle (x, y)   : ({angle_x:.2f}, {angle_y:.2f})"
+            ]
+
+            for i, line in enumerate(info_lines):
+                y = 20 + i * 20
+                (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, font_thickness)
+                cv2.rectangle(image, (10, y - 15), (10 + text_w + 4, y + 5), bg_color, -1)
+                cv2.putText(image, line, (12, y), font, font_scale, text_color, font_thickness)
+        else:
+            cv2.putText(image, "No detection", (10, 30), font, font_scale, (0, 0, 255), font_thickness)
+
 
 
 #============================================
