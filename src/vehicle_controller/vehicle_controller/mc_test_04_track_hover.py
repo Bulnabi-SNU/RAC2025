@@ -30,6 +30,7 @@ class MissionState(Enum):
     DESCEND = "DESCEND"
     GRIPPER_CLOSE = "GRIPPER_CLOSE"
     ASCEND = "ASCEND"
+    DONE = "DONE"
 
 class MissionController(PX4BaseController):
 
@@ -37,11 +38,32 @@ class MissionController(PX4BaseController):
         super().__init__("mc_test_04")
 
 
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('mission_altitude', 15.0),
+                ('track_min_altitude', 4.0),
+                ('gripper_altitude', 0.3),
+                ('tracking_target_offset', 0.35),
+                ('tracking_acceptance_radius_xy', 0.2),
+                ('tracking_acceptance_radius_z', 0.2),
+                ('detect_target_type', 1),
+            ])
 
         # Mission parameters
-        self.gripper_altitude = 0.3  # altitude for pickup/dropoff operations
-        self.track_min_altitude = -4.0 # minimum altitude for tracking - just go down without tracking from here
-        self.mission_altitude = -15.0  # normal mission altitude
+
+        self.mission_altitude = self.get_parameter('mission_altitude').value
+        self.gripper_altitude = self.get_parameter('gripper_altitude').value
+        self.track_min_altitude = self.get_parameter('track_min_altitude').value
+
+        self.detect_target_type = self.get_parameter('detect_target_type').value
+
+        self.tracking_target_offset = self.get_parameter('tracking_target_offset').value
+
+        self.tracking_acceptance_radius_xy = \
+            self.get_parameter('tracking_acceptance_radius_xy').value
+        self.tracking_acceptance_radius_z = \
+            self.get_parameter('tracking_acceptance_radius_z').value
         
         # External data placeholders
         self.target = None
@@ -53,8 +75,11 @@ class MissionController(PX4BaseController):
         self.state = MissionState.INIT  # Initial state
         
         # Offboard controller
-        self.drone_target_controller = DroneTargetController(target_distance=0.35, target_altitude=self.track_min_altitude, 
-                                                             acceptance_radius=0.1)
+
+        self.drone_target_controller = DroneTargetController(
+                target_distance=self.tracking_target_offset, 
+                target_altitude=self.track_min_altitude, 
+                acceptance_radius=self.tracking_acceptance_radius_xy)
 
         # CV Detection Subscriber
         self.target_subscriber = self.create_subscription(
@@ -76,6 +101,9 @@ class MissionController(PX4BaseController):
             self._handle_gripper_close()
         elif self.state == MissionState.ASCEND:
             self._handle_ascend()
+        elif self.state == MissionState.DONE:
+            pass
+            
 
         # 1: Casualty
         # 2: Drop Tag
@@ -83,7 +111,7 @@ class MissionController(PX4BaseController):
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=3
+                detect_target_type=self.detect_target_type
                 ),
             )
 
@@ -127,7 +155,7 @@ class MissionController(PX4BaseController):
     def _handle_descend(self, nextState: MissionState):
         """Descend to casualty pickup position"""
         # Set position setpoint to pickup altitude
-        pickup_pos = np.array([self.pos[0], self.pos[1], self.gripper_altitude])
+        pickup_pos = np.array([self.pos[0], self.pos[1], 0])
         self.publish_setpoint(pos_sp=pickup_pos)
 
         # Check if at pickup altitude
@@ -147,11 +175,12 @@ class MissionController(PX4BaseController):
 
     def _handle_ascend(self):
         """Return to mission altitude with casualty"""
-        ascend_pos = np.array([self.pos[0], self.pos[1], self.mission_altitude])
+        ascend_pos = np.array([self.pos[0], self.pos[1], -self.mission_altitude])
         self.publish_setpoint(pos_sp=ascend_pos)
 
         if abs(self.pos[2] - self.mission_altitude) < 0.2:
-            return
+            self.state = MissionState.DONE
+            self.get_logger().info("Done ascending.")
 
     
     # =======================================

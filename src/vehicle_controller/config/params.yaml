@@ -1,0 +1,21 @@
+/**:
+  ros__parameters:
+    do_logging: False
+
+    mission_altitude: 15.0  # normal mission altitude
+    track_min_altitude: 4.0 # min altitude for tracking - just blind descend from here
+    gripper_altitude: 0.3  # altitude for pickup/dropoff 
+
+    tracking_target_offset: 0.35  # Distance between camera and gripper / CoG
+    tracking_acceptance_radius_xy: 0.2  # Horizontal radius for tracking mode
+    tracking_acceptance_radius_z: 0.2  # Horizontal radius for tracking mode
+
+/mc_main:
+  ros__parameters:
+    casualty_waypoint: 14  # waypoint number for casualty
+    drop_tag_waypoint: 15  # waypoint number for drop tag
+    landing_tag_waypoint: 16  # waypoint number for landing tag
+
+/mc_test_04:
+  ros__parameters:
+    detect_target_type: 3  # Type of target to detect 1: casualty, 2: drop tag, 3: landing tag
