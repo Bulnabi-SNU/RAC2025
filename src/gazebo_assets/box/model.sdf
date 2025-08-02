@@ -28,16 +28,7 @@
       </visual>
 
       <!-- Single collision mesh -->
-      <collision name="box_collision">
-        <geometry>
-          <mesh>
-            <uri>model://box/meshes/box_collision.stl</uri>
-            <scale>0.001 0.001 0.001</scale>
-          </mesh>
-        </geometry>
-      </collision>
-    </link>
-
+	</link>
   </model>
 </sdf>
 
