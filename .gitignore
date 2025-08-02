@@ -4,3 +4,7 @@ install/
 __pycache__/
 flight_logs/*
 .devcontainer.json
+
+
+docker-compose.nvidia.yml
+.gitignore

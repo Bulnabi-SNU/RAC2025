@@ -157,13 +157,13 @@ class ImageProcessor(Node):
             return  # Skip processing if no detection is required
         elif self.vehicle_state.detect_target_type == 1:
             # Casualty 감지 및 중심으로 이동
-            self.detect_casualty()
+            self.handle_detect_casualty()
         elif self.vehicle_state.detect_target_type == 2:
             # DropTag 감지 및 중심으로 이동
-            self.detect_drop_tag()
+            self.handle_detect_drop_tag()
         elif self.vehicle_state.detect_target_type == 3:
             # Landing Tag 감지 및 중심으로 이동
-            self.detect_landing_tag()
+            self.handle_detect_landing_tag()
         
         h, w, _ = self.last_image.shape
         
@@ -184,8 +184,10 @@ class ImageProcessor(Node):
         self.render_image(output_image)
 
         # show image to monitor
-        cv2.imshow("Image Processor", output_image)
-        print(self.last_image)
+        resized_frame = cv2.resize(output_image, (960, 540))
+        cv2.imshow("Image Processor", resized_frame)
+        cv2.waitKey(1)  
+        #print(self.last_image) 
 
     #============================================
     # "Subscriber" Callback Functions
@@ -203,7 +205,7 @@ class ImageProcessor(Node):
     # Detection Related Functions
     #============================================ 
     
-    def detect_casualty(self):
+    def handle_detect_casualty(self):
         
         detection, _ =  self.casualty_detector.detect_casualty(self.last_image)
         
@@ -212,10 +214,10 @@ class ImageProcessor(Node):
             return
         
         self.detection_status = 0
-        self.detection_cx = detection[0]
-        self.detection_cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
 
-    def detect_drop_tag(self):
+    def handle_detect_drop_tag(self):
 
         detection, _ =  self.drop_tag_detector.detect_drop_tag(self.last_image)
         
@@ -224,10 +226,10 @@ class ImageProcessor(Node):
             return
         
         self.detection_status = 0
-        self.detection_cx = detection[0]
-        self.detection_cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
 
-    def detect_landing_tag(self):
+    def handle_detect_landing_tag(self):
         
         detection, _ = self.landing_tag_detector.detect_landing_tag(self.last_image)
         
@@ -241,16 +243,50 @@ class ImageProcessor(Node):
             pass
             
         self.detection_status = 0
-        self.detection_cx = detection[0]
-        self.detection_cy = detection[1]
+        self.detection_cx = int(detection[0])
+        self.detection_cy = int(detection[1])
         
     """ Function to render shapes/text onto camera feed before streaming """
     def render_image(self, image):
+        h, w, _ = image.shape
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        font_thickness = 1
+        text_color = (255, 255, 255)
+        bg_color = (0, 0, 0)
+
+        center_x, center_y = w // 2, h // 2
+        cv2.line(image, (center_x - 20, center_y), (center_x + 20, center_y), (0, 255, 0), 2)
+        cv2.line(image, (center_x, center_y - 20), (center_x, center_y + 20), (0, 255, 0), 2)
+
         if self.detection_status == 0:
             cv2.circle(image, 
                     (self.detection_cx, self.detection_cy), 
                     5, (0, 0, 255), -1)
-        # Blahblah write state on top left etc.etc.etc.
+            angle_x, angle_y = pixel_to_fov(
+                self.detection_cx, self.detection_cy, w, h, 81, 93
+            )
+
+            detect_type_label = {
+                1: "Casualty",
+                2: "DropTag",
+                3: "LandingTag"
+            }.get(self.vehicle_state.detect_target_type, "Unknown")
+
+            info_lines = [
+                f"Detection Mode : {detect_type_label}",
+                f"Pixel (x, y)   : ({self.detection_cx}, {self.detection_cy})",
+                f"Angle (x, y)   : ({angle_x:.2f}, {angle_y:.2f})"
+            ]
+
+            for i, line in enumerate(info_lines):
+                y = 20 + i * 20
+                (text_w, text_h), _ = cv2.getTextSize(line, font, font_scale, font_thickness)
+                cv2.rectangle(image, (10, y - 15), (10 + text_w + 4, y + 5), bg_color, -1)
+                cv2.putText(image, line, (12, y), font, font_scale, text_color, font_thickness)
+        else:
+            cv2.putText(image, "No detection", (10, 30), font, font_scale, (0, 0, 255), font_thickness)
+
 
 
 #============================================

@@ -618,17 +618,34 @@
     </link>
 
 
-<!-- Camera calibration 정보 추가한 카메라 모델 만들어서 바꿔줌. 원래 썼던 mono_cam은 아래 있음 -->
+
+      <!-- 여기에는 짐벌이 있다. 그러나 아직 앞을 보고 있기 때문에 아래를 보게 만들어줘야 한다. 기존에 사용했던 카메라를 사용하려면 아래 comment out 된 코드 쓰기 -->
+
+       <include merge='true'>
+          <uri>model://gimbal_camera</uri>
+          <pose>0 0 -0.3 0 0 0</pose>
+          <name>gimbal_camera</name>
+        </include>
+        <joint name="camera_joint" type="fixed">
+          <parent>base_link</parent>
+          <child>cgo3_mount_link</child>
+          <pose relative_to="base_link">0 0 0 0 0 0</pose>
+        </joint>  
+
+
+
+
+<!-- Camera calibration 정보 추가한 카메라 모델 만들어서 바꿔줌. 원래 썼던 mono_cam은 아래 있음
        <include merge='true'>
           <uri>model://camera</uri>
-          <pose>0 0 -0.01 0 1.5707 0</pose>  <!-- 이 z 위치가 vtol 중심으로부터 카메라의 상대적인 위치. 그러나 30cm 아래로 하면 바닥을 뚫고 내려가버린다. 일단은 -0.03로 설정 -->
+          <pose>0 0 -0.01 0 0 0</pose>  이 z 위치가 vtol 중심으로부터 카메라의 상대적인 위치. 그러나 30cm 아래로 하면 바닥을 뚫고 내려가버린다. 일단은 -0.03로 설정
           <name>camera</name>
         </include>
         <joint name="CameraJoint" type="fixed">
           <parent>base_link</parent>
           <child>camera_link</child>
           <pose relative_to="base_link">0 0 0 0 0 0</pose>
-        </joint>  
+        </joint>   -->
 
 
    <!-- <include merge='true'>
