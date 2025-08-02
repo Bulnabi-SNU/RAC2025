@@ -95,7 +95,7 @@ class DroneTargetController:
         # desired_position = target_world_pos
         
         # Override altitude to target altitude
-        desired_position[2] = 0.9*drone_position[2] + 0.1*self.target_altitude
+        desired_position[2] = 0.9*drone_position[2] + (-0.1)*self.target_altitude
         
         # # Apply smoothing if we have a previous target
         # if self.prev_target_position is not None:

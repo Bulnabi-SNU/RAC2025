@@ -63,7 +63,7 @@ class ImageProcessor(Node):
             depth=1
         )
         
-        image_qos_profile = None
+        image_qos_profile = qos_profile
         
         if use_gazebo:
             image_qos_profile = QoSProfile(
@@ -72,8 +72,32 @@ class ImageProcessor(Node):
                 history=HistoryPolicy.KEEP_LAST,
                 depth=1
             )
-        else:
-            image_qos_profile = qos_profile
+
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('do_streaming', False),
+                
+                ('casualty_lower_orange', [5.0,150.0,150.0]),
+                ('casualty_upper_orange', [20.0, 255.0, 255.0]),
+                ('casualty_min_area', 500.0),
+
+                ('drop_tag_lower_red1', [0.0,100.0,50.0]),
+                ('drop_tag_upper_red1', [10.0,255.0,255.0]),
+                ('drop_tag_lower_red2', [170.0,100.0,50.0]),
+                ('drop_tag_upper_red2', [180.0,255.0,255.0]),
+                ('drop_tag_min_area', 500.0),
+                ('drop_tag_pause_threshold', 0.4),
+
+                ('landing_tag_tag_size', 0.5),
+                ('landing_tag_K', [1070.089695, 0.0, 1045.772015, 
+                                    0.0, 1063.560096, 566.257075,
+                                    0.0, 0.0, 1.0]),
+                ('landing_tag_D', [-0.090292, 0.052332, 0.000171, 0.006618, 0.0])
+        ])
+        
+        self.do_streaming = self.get_parameter('do_streaming').value
+
 
         """ for VehicleState callback"""
         self.vehicle_state = VehicleState()
@@ -106,38 +130,35 @@ class ImageProcessor(Node):
         self.timer_period = 0.05
         self.streaming_period = 0.1
         self.main_timer = self.create_timer(self.timer_period, self.main_timer_callback)
-        self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
+
+        if(self.do_streaming): self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
         '''
         2. Instantiating Different Detectors
-        '''
+        '''        
 
         # [Casualty Detector]
         self.casualty_detector = CasualtyDetector(
-            lower_orange=np.array([5, 150, 150]),
-            upper_orange=np.array([20, 255, 255]),
-            min_area=500
+            lower_orange=np.array(self.get_parameter('casualty_lower_orange').value),
+            upper_orange=np.array(self.get_parameter('casualty_upper_orange').value),
+            min_area=(self.get_parameter('casualty_min_area').value)
         )
 
         # [DropTag Detector]
         self.drop_tag_detector = DropTagDetector(
-            lower_red1=np.array([0, 100, 50]),
-            upper_red1=np.array([10, 255, 255]),
-            lower_red2=np.array([170, 100, 50]),
-            upper_red2=np.array([180, 255, 255]),
-            min_area=500,
-            pause_threshold=0.4
+            lower_red1=np.array(self.get_parameter('drop_tag_lower_red1').value),
+            upper_red1=np.array(self.get_parameter('drop_tag_upper_red1').value),
+            lower_red2=np.array(self.get_parameter('drop_tag_lower_red2').value),
+            upper_red2=np.array(self.get_parameter('drop_tag_upper_red2').value),
+            min_area=self.get_parameter('drop_tag_min_area').value,
+            pause_threshold=self.get_parameter('drop_tag_pause_threshold').value
         )
 
         # [Landing Tag Detector]
         self.landing_tag_detector = LandingTagDetector(
-            tag_size=0.5,       
-            K=np.array([
-                            [1070.089695, 0.0, 1045.772015],
-                            [0.0, 1063.560096, 566.257075],
-                            [0.0, 0.0, 1.0]
-                        ], dtype=np.float64),                     
-            D=np.array([-0.090292, 0.052332, 0.000171, 0.006618, 0.0], dtype=np.float64),                    
+            tag_size=self.get_parameter('landing_tag_tag_size').value,       
+            K=np.reshape(np.array(self.get_parameter('landing_tag_K').value,dtype=np.float64),(3,3)),                     
+            D=np.array(self.get_parameter('landing_tag_D').value, dtype=np.float64),                    
         )
         
     #============================================
@@ -168,8 +189,9 @@ class ImageProcessor(Node):
         
         targetLocation = TargetLocation()
         targetLocation.status = self.detection_status
+        # SET ROS PARAMETERS 
         targetLocation.angle_x, targetLocation.angle_y = \
-            pixel_to_fov(self.detection_cx,self.detection_cy,w,h,81,93)
+            pixel_to_fov(self.detection_cx, self.detection_cy, w, h,81,93)
         
         self.target_pub.publish(targetLocation)
     

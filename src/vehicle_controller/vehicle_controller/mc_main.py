@@ -1,8 +1,8 @@
 __author__ = "PresidentPlant"
 __contact__ = ""
-# import rclpy: ros library
+
 import rclpy
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+# from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 from enum import Enum
 
@@ -11,14 +11,10 @@ from vehicle_controller.core.drone_target_controller import DroneTargetControlle
 from vehicle_controller.core.logger import Logger
 
 # import px4_msgs
-from px4_msgs.msg import VehicleStatus, VehicleCommand, VehicleGlobalPosition
+# from px4_msgs.msg import VehicleStatus, VehicleCommand, VehicleGlobalPosition
 
 # import math library
 import numpy as np
-import math
-
-# gps
-import pymap3d as p3d
 
 # Custom Messages
 from custom_msgs.msg import VehicleState, TargetLocation
@@ -51,13 +47,36 @@ class MissionController(PX4BaseController):
     def __init__(self):
         super().__init__("mc_main")
 
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('casualty_waypoint', 14),
+                ('drop_tag_waypoint', 15),
+                ('landing_tag_waypoint', 16),
+                ('do_logging', True),
+                ('mission_altitude', 15.0),
+                ('track_min_altitude', 4.0),
+                ('gripper_altitude', 0.3),
+                ('tracking_target_offset', 0.35),
+                ('tracking_acceptance_radius_xy', 0.2),
+                ('tracking_acceptance_radius_z', 0.2),
+            ])
+
         # Mission parameters
-        self.pickup_waypoint = 14  # waypoint number for pickup
-        self.dropoff_waypoint = 15  # waypoint number for dropoff
-        self.landing_waypoint = 16  # waypoint number for landing
-        self.gripper_altitude = 0.3  # altitude for pickup/dropoff operations
-        self.track_min_altitude = -4.0 # minimum altitude for tracking - just go down without tracking from here
-        self.mission_altitude = -15.0  # normal mission altitude
+        self.casualty_waypoint = self.get_parameter('casualty_waypoint').value
+        self.drop_tag_waypoint = self.get_parameter('drop_tag_waypoint').value
+        self.landing_tag_waypoint = self.get_parameter('landing_tag_waypoint').value
+
+        self.mission_altitude = self.get_parameter('mission_altitude').value
+        self.gripper_altitude = self.get_parameter('gripper_altitude').value
+        self.track_min_altitude = self.get_parameter('track_min_altitude').value
+
+        self.tracking_target_offset = self.get_parameter('tracking_target_offset').value
+
+        self.tracking_acceptance_radius_xy = \
+            self.get_parameter('tracking_acceptance_radius_xy').value
+        self.tracking_acceptance_radius_z = \
+            self.get_parameter('tracking_acceptance_radius_z')
 
         # External data placeholders
         self.target = None
@@ -67,18 +86,21 @@ class MissionController(PX4BaseController):
         self.offboard_control_mode_params["velocity"] = False
 
         # State machine
-        self.state = MissionState.CASUALTY_TRACK  # Initial state
+        self.state = MissionState.INIT  # Initial state
         self.mission_paused_waypoint = 0
         self.pickup_complete = False
         self.dropoff_complete = False
         
         # Logger
-        self.doLogging = False
+        self.do_log_flight = self.get_parameter('do_logging')
         self.logger = Logger(log_path="./flight_logs/")
         
         # Offboard controller
-        self.drone_target_controller = DroneTargetController(target_distance=0.35, target_altitude=self.track_min_altitude, 
-                                                             acceptance_radius=0.1)
+        # TODO: change target_distance argument name
+        self.drone_target_controller = DroneTargetController(
+                target_distance=self.tracking_target_offset, 
+                target_altitude=self.track_min_altitude, 
+                acceptance_radius=self.tracking_acceptance_radius_xy)
 
         # CV Detection Subscriber
         self.target_subscriber = self.create_subscription(
@@ -201,7 +223,7 @@ class MissionController(PX4BaseController):
         else:
             self.get_logger().info("Armed in offboard mode, starting logger")
             
-            if self.doLogging:
+            if self.do_log_flight:
                 self.logger.start_logging()
                 self.log_timer = self.create_timer(0.1, self._log_timer_callback)
             
@@ -232,19 +254,19 @@ class MissionController(PX4BaseController):
         current_wp = self.mission_wp_num
 
         # Check if reached pickup waypoint
-        if current_wp == self.pickup_waypoint and not self.pickup_complete:
+        if current_wp == self.casualty_waypoint and not self.pickup_complete:
             self.mission_paused_waypoint = current_wp
             self.state = MissionState.MISSION_TO_OFFBOARD_CASUALTY
             return
 
         # Check if reached dropoff waypoint
-        if current_wp == self.dropoff_waypoint and not self.dropoff_complete:
+        if current_wp == self.drop_tag_waypoint and not self.dropoff_complete:
             self.mission_paused_waypoint = current_wp
             self.state = MissionState.MISSION_TO_OFFBOARD_DROP_TAG
             return
 
         # Check if reached landing waypoint
-        if current_wp == self.landing_waypoint:
+        if current_wp == self.landing_tag_waypoint:
             self.state = MissionState.MISSION_TO_OFFBOARD_LANDING_TAG
             return
 
@@ -272,7 +294,7 @@ class MissionController(PX4BaseController):
     def _handle_descend(self, nextState: MissionState):
         """Descend to casualty pickup position"""
         # Set position setpoint to pickup altitude
-        pickup_pos = np.array([self.pos[0], self.pos[1], self.gripper_altitude])
+        pickup_pos = np.array([self.pos[0], self.pos[1], 0])
         self.publish_setpoint(pos_sp=pickup_pos)
 
         # Check if at pickup altitude
@@ -303,18 +325,19 @@ class MissionController(PX4BaseController):
 
     def _handle_ascend(self):
         """Return to mission altitude with casualty"""
-        ascend_pos = np.array([self.pos[0], self.pos[1], self.mission_altitude])
+        ascend_pos = np.array([self.pos[0], self.pos[1], -self.mission_altitude])
         self.publish_setpoint(pos_sp=ascend_pos)
 
-        if abs(self.pos[2] - self.mission_altitude) < 0.2:
+        if abs((-self.pos[2]) - self.mission_altitude) < self.tracking_acceptance_radius_z:
             self.state = MissionState.OFFBOARD_TO_MISSION
 
+    # TODO: maybe remove this state depending on how stable landing mode is?
     def _handle_final_descend(self):
         """Descend for landing"""
-        landing_pos = np.array([self.pos[0], self.pos[1], self.gripper_altitude])
+        landing_pos = np.array([self.pos[0], self.pos[1], 0])
         self.publish_setpoint(pos_sp=landing_pos)
 
-        if abs(self.pos[2] - self.gripper_altitude) < 0.2:
+        if abs(self.pos[2] - self.gripper_altitude) < self.tracking_acceptance_radius_z:
             self.state = MissionState.LAND
 
     def _handle_land(self):
