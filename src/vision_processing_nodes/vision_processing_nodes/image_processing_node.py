@@ -133,6 +133,9 @@ class ImageProcessor(Node):
 
         if(self.do_streaming): self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
+        # TODO: Add callback for ROS parameter change. 
+        # Probably need to add parameter update functions for each detector as well.
+        
         '''
         2. Instantiating Different Detectors
         '''        

@@ -320,6 +320,13 @@ class PX4BaseController(Node, ABC):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
 
+    # TODO: Add functions for the messagetype GimbalManagerSetAttitude
+    # Ref: https://mavlink.io/en/messages/common.html#GIMBAL_MANAGER_SET_ATTITUDE
+    # Need to add this to the dds_topics.yaml first.
+    
+    # TODO: Add helper function for MAV_CMD_DO_SET_ACTUATOR
+    # or at least document usage (https://mavlink.io/en/messages/common.html#MAV_CMD_DO_SET_ACTUATOR)
+
     # =======================================
     # Set Home position functions
     # =======================================

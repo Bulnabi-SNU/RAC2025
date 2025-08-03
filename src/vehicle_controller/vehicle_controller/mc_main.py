@@ -77,9 +77,45 @@ class MissionController(PX4BaseController):
         self.target_subscriber = self.create_subscription(
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
+        
+        # TODO: Add callback for ROS parameter change      
 
         self.get_logger().info("Mission Controller initialized")
 
+    def get_ros_parameters(self):
+        """Get ROS2 parameters and save them to local variables"""
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('casualty_waypoint', 14),
+                ('drop_tag_waypoint', 15),
+                ('landing_tag_waypoint', 16),
+                ('mission_altitude', 15.0),
+                ('track_min_altitude', 4.0),
+                ('gripper_altitude', 0.3),
+                ('tracking_target_offset', 0.35),
+                ('tracking_acceptance_radius_xy', 0.2),
+                ('tracking_acceptance_radius_z', 0.2),
+                ('do_logging', True),
+            ])
+
+        self.casualty_waypoint = self.get_parameter('casualty_waypoint').value
+        self.drop_tag_waypoint = self.get_parameter('drop_tag_waypoint').value
+        self.landing_tag_waypoint = self.get_parameter('landing_tag_waypoint').value
+
+        self.mission_altitude = self.get_parameter('mission_altitude').value
+        self.gripper_altitude = self.get_parameter('gripper_altitude').value
+        self.track_min_altitude = self.get_parameter('track_min_altitude').value
+
+        self.tracking_target_offset = self.get_parameter('tracking_target_offset').value
+
+        self.tracking_acceptance_radius_xy = \
+            self.get_parameter('tracking_acceptance_radius_xy').value
+        self.tracking_acceptance_radius_z = \
+            self.get_parameter('tracking_acceptance_radius_z')
+            
+        self.do_log_flight = self.get_parameter('do_logging')
+    
     def main_loop(self):
         """Main control loop - implements the state machine"""
 
@@ -150,41 +186,6 @@ class MissionController(PX4BaseController):
                 detect_target_type= target_type_dict.get(self.state, 0)
             )
         )
-
-    def get_ros_parameters(self):
-        """Get ROS2 parameters and save them to local variables"""
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                ('casualty_waypoint', 14),
-                ('drop_tag_waypoint', 15),
-                ('landing_tag_waypoint', 16),
-                ('mission_altitude', 15.0),
-                ('track_min_altitude', 4.0),
-                ('gripper_altitude', 0.3),
-                ('tracking_target_offset', 0.35),
-                ('tracking_acceptance_radius_xy', 0.2),
-                ('tracking_acceptance_radius_z', 0.2),
-                ('do_logging', True),
-            ])
-
-        self.casualty_waypoint = self.get_parameter('casualty_waypoint').value
-        self.drop_tag_waypoint = self.get_parameter('drop_tag_waypoint').value
-        self.landing_tag_waypoint = self.get_parameter('landing_tag_waypoint').value
-
-        self.mission_altitude = self.get_parameter('mission_altitude').value
-        self.gripper_altitude = self.get_parameter('gripper_altitude').value
-        self.track_min_altitude = self.get_parameter('track_min_altitude').value
-
-        self.tracking_target_offset = self.get_parameter('tracking_target_offset').value
-
-        self.tracking_acceptance_radius_xy = \
-            self.get_parameter('tracking_acceptance_radius_xy').value
-        self.tracking_acceptance_radius_z = \
-            self.get_parameter('tracking_acceptance_radius_z')
-            
-        self.do_log_flight = self.get_parameter('do_logging')
-    
 
     def on_target_update(self, msg):
         """Callback for target coordinates from image_processing_node"""
