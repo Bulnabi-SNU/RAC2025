@@ -116,18 +116,18 @@ class ImageProcessor(Node):
         1. Subscribers & Publishers & Timers
         """
         # [Subscribers]
-        # 1. VehicleState          : current state of vehicle (ex. CASUALTY_TRACK, DESCEND_PICKUP, etc.)
+        # 1. VehicleState           : current state of vehicle (ex. CASUALTY_TRACK, DESCEND_PICKUP, etc.)
         #    - detect_target_type   : 0: No detection, 1: Casualty detection, 2: Casualty dropoff detection, 3: Landing tag detection
-        # 2. CameraRawImage         : Raw Image received from the Camera
+        # 2. CameraRawImage         :  Image received from the Camera
         self.vehicle_state_subscriber = self.create_subscription(VehicleState, '/vehicle_state', self.state_callback, qos_profile)
         self.camera_image_subscriber = self.create_subscription(Image, self.topicNameFrames, self.image_callback, image_qos_profile)
 
         # [Publishers]
-        # 1. TargetLocation          : publish the target location based on the type given by VehicleState
+        # 1. TargetLocation         : publish the target location based on the type given by VehicleState
         self.target_pub = self.create_publisher(TargetLocation, '/target_position', qos_profile)
 
         # [Timers]
-        self.timer_period = 0.05
+        self.timer_period = 0.05 # Maybe set this into a parameter?
         self.streaming_period = 0.1
         self.main_timer = self.create_timer(self.timer_period, self.main_timer_callback)
 
@@ -189,7 +189,7 @@ class ImageProcessor(Node):
         
         targetLocation = TargetLocation()
         targetLocation.status = self.detection_status
-        # SET ROS PARAMETERS 
+        # TODO: SET ROS PARAMETERS for fov 
         targetLocation.angle_x, targetLocation.angle_y = \
             pixel_to_fov(self.detection_cx, self.detection_cy, w, h,81,93)
         
@@ -204,7 +204,7 @@ class ImageProcessor(Node):
         
         self.render_image(output_image)
 
-        # show image to monitor
+        # Show image to connected monitor
         resized_frame = cv2.resize(output_image, (960, 540))
         cv2.imshow("Image Processor", resized_frame)
         cv2.waitKey(1)  
@@ -216,7 +216,7 @@ class ImageProcessor(Node):
         
     def state_callback(self, msg):
         self.vehicle_state = msg
-        self.get_logger().debug(f"Vehicle state updated: detect_target_type = {msg.detect_target_type}") #for logging vehiclestate
+        self.get_logger().debug(f"Vehicle state updated: detect_target_type = {msg.detect_target_type}")
 
     def image_callback(self, msg):
         self.last_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -224,6 +224,7 @@ class ImageProcessor(Node):
     # TODO maybe add additional logic by-case
     #============================================
     # Detection Related Functions
+    # All detectors return a 2d array (cx,cy) and additional info when it's needed.
     #============================================ 
     
     def handle_detect_casualty(self):
@@ -267,8 +268,13 @@ class ImageProcessor(Node):
         self.detection_cx = int(detection[0])
         self.detection_cy = int(detection[1])
         
-    """ Function to render shapes/text onto camera feed before streaming """
+    #============================================
+    # Streaming Related Functions
+    #============================================     
+        
+    
     def render_image(self, image):
+        """ Function to render shapes/text onto camera feed before streaming """
         h, w, _ = image.shape
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.5

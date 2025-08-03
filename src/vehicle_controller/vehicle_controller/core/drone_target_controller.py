@@ -8,15 +8,15 @@ class DroneTargetController:
     Assumes target is on the ground and camera faces straight down.
     """
     
-    def __init__(self, target_distance: float = 0.35, target_altitude: float = 5.0, acceptance_radius: float = 0.1):
+    def __init__(self, target_offset: float = 0.35, target_altitude: float = 5.0, acceptance_radius: float = 0.1):
         """
         Initialize the controller
         
         Args:
-            target_distance: Desired distance behind camera (meters)
+            target_offset: Distance between camera and target (meters)
             target_altitude: Desired drone altitude (meters)
         """
-        self.target_distance = target_distance
+        self.target_offset = target_offset
         self.target_altitude = target_altitude
         self.acceptance_radius = acceptance_radius
         
@@ -63,7 +63,7 @@ class DroneTargetController:
         # Target position in drone's local frame (relative to drone)
         target_local = np.array([horizontal_distance_x, horizontal_distance_y, -drone_altitude])
         # Adjust for target distance behind camera
-        target_local += np.array([0,1,0]) * self.target_distance
+        target_local += np.array([0,1,0]) * self.target_offset
         
         # Rotate to NED frame using yaw
         
@@ -158,7 +158,7 @@ class DroneTargetController:
             altitude_smoothing: Altitude smoothing factor (0-1)
         """
         if target_distance is not None:
-            self.target_distance = target_distance
+            self.target_offset = target_distance
         if target_altitude is not None:
             self.target_altitude = target_altitude
         if position_smoothing is not None:

@@ -1,6 +1,6 @@
 """
 Base PX4 Controller Class
-Handles all the boilerplate ROS2 and PX4 communication
+Handles all the boilerplate ROS2 and PX4 communications
 """
 
 __author__ = "PresidentPlant"
@@ -10,28 +10,30 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
+
 # PX4 Messages
-"""msgs for subscription"""
+
+"""Messages for subscription"""
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleLocalPosition
 from px4_msgs.msg import VehicleGlobalPosition
-from px4_msgs.msg import SensorGps  # for log
+from px4_msgs.msg import SensorGps  # for log file, not used anywhere else
 from px4_msgs.msg import MissionResult
 
-"""msgs for publishing"""
+"""Messages for publishing"""
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import TrajectorySetpoint
 
-import os
+
 import numpy as np
 from abc import ABC, abstractmethod
 
-# gps
+# GPS coordinate (LLA) to Local (NED) conversion
 import pymap3d as p3d
 
-# Custom Messages
-from custom_msgs.msg import VehicleState, TargetLocation
+# Custom Message
+from custom_msgs.msg import VehicleState
 
 
 class PX4BaseController(Node, ABC):
@@ -43,20 +45,18 @@ class PX4BaseController(Node, ABC):
     def __init__(self, node_name: str, timer_period: float = 0.01):
         super().__init__(node_name)
 
-        self.time_period = timer_period
+        self.timer_period = timer_period
 
         # Configure QoS profile
         self._setup_qos()
 
-        # Initialize state variables
         self._init_state_variables()
 
-        # Create subscribers and publishers
         self._create_subscribers()
         self._create_publishers()
 
-        # Setup timers
         self._setup_timers()
+        
         self.get_logger().info(f"{node_name} initialized")
 
     # =======================================
@@ -90,14 +90,16 @@ class PX4BaseController(Node, ABC):
         }
 
         # Position, velocity, and yaw
-        self.pos = np.array([0.0, 0.0, 0.0])  # local NED
-        self.pos_gps = np.array([0.0, 0.0, 0.0])  # global GPS
-        self.vel = np.array([0.0, 0.0, 0.0])
-        self.yaw = 0.0
+        self.pos = np.array([0.0, 0.0, 0.0])  # local NED coordinates (0 = home (usually takeoff point))
+        self.pos_gps = np.array([0.0, 0.0, 0.0])  # global GPS coordinates (LLA)
+        self.vel = np.array([0.0, 0.0, 0.0]) # NED coordinates
+        self.yaw = 0.0 # Radians
 
-        # Home position
-        self.get_position_flag = False
+        # Home position flags
+        self.get_position_flag = False 
         self.home_set_flag = False
+        
+        # Home position state: (basically the "zero point" of the drone)
         self.home_position = np.array([0.0, 0.0, 0.0])
         self.home_position_gps = np.array([0.0, 0.0, 0.0])
         self.home_yaw = 0.0
@@ -167,10 +169,10 @@ class PX4BaseController(Node, ABC):
     def _setup_timers(self):
         """Setup ROS2 timers"""
         self.offboard_heartbeat = self.create_timer(
-            self.time_period, self._offboard_heartbeat_callback
+            self.timer_period, self._offboard_heartbeat_callback
         )
 
-        self.main_timer = self.create_timer(self.time_period, self._main_timer_callback)
+        self.main_timer = self.create_timer(self.timer_period, self._main_timer_callback)
 
     # =======================================
     # Timer Callback functions
@@ -185,7 +187,7 @@ class PX4BaseController(Node, ABC):
                 self.get_logger().warn(f"Heartbeat delay detected: {delta:.3f}s")
         self.last_heartbeat_time = now
 
-        # Publish offboard control mode (can be overridden)
+        # Publish offboard control mode (can be overridden via setting offboard_control_mode_params)
         self.publish_offboard_control_mode(**self.offboard_control_mode_params)
 
     def _main_timer_callback(self):
@@ -218,6 +220,12 @@ class PX4BaseController(Node, ABC):
         self.pos = np.array([msg.x, msg.y, msg.z])
         self.vel = np.array([msg.vx, msg.vy, msg.vz])
         self.yaw = msg.heading
+         
+        # If home is set then make self.pos relative to home,
+        # instead of the EKF2-module start location
+        if self.get_position_flag and self.home_set_flag:
+            self.pos = self.pos - self.home_position
+        
         self.on_local_position_update(msg)
 
     def _vehicle_global_position_callback(self, msg):
@@ -226,24 +234,27 @@ class PX4BaseController(Node, ABC):
         self.vehicle_global_position = msg
         self.pos_gps = np.array([msg.lat, msg.lon, msg.alt])
         self.on_global_position_update(msg)
-        if self.get_position_flag and self.home_set_flag:
-            self.pos = self.pos - self.home_position
+        
 
     def _vehicle_gps_callback(self, msg):
         """Callback for GPS updates"""
         if msg.fix_type >= 3:
+            # Check if GPS has at least FIX_TYPE_3D
             self.vehicle_gps = msg
         else:
             self.get_logger().warn("GPS fix type is less than 3, no valid GPS data")          
 
     def _mission_result_callback(self, msg):
+        # This is called only when the waypoint changes.
         self.mission_result = msg
         self.mission_wp_num = msg.seq_current
 
     # =======================================
-    # Additional Functions
+    # Additional Overridable Callback Functions
     # =======================================
 
+    # Probably won't be used at all, but keep them for now just in case?
+    
     def on_vehicle_status_update(self, msg):
         """Override to handle vehicle status updates"""
         # Could add additional status monitoring here
@@ -263,8 +274,8 @@ class PX4BaseController(Node, ABC):
     # Publisher Callback functions
     # =======================================
 
-    def publish_vehicle_command(self, command, **kwargs):
-        """Publish a vehicle command"""
+    def publish_vehicle_command(self, command: int, **kwargs):
+        """Publish a vehicle command (One of the Vehicle_CMD Mavlink Messages)"""
         msg = VehicleCommand()
         msg.command = command
         msg.param1 = kwargs.get("param1", float("nan"))
@@ -274,6 +285,9 @@ class PX4BaseController(Node, ABC):
         msg.param5 = kwargs.get("param5", float("nan"))
         msg.param6 = kwargs.get("param6", float("nan"))
         msg.param7 = kwargs.get("param7", float("nan"))
+        
+        # Since this is not a GCS but an onboard computer, it's sending the command to itself.
+        # (if MAV_SYS_ID is set != 1 this will need to be changed.)
         msg.target_system = 1
         msg.target_component = 1
         msg.source_system = 1
@@ -311,6 +325,10 @@ class PX4BaseController(Node, ABC):
     # =======================================
 
     def set_home_position(self):
+        if not self.get_position_flag:
+            self.get_logger().warn("Global position hasn't been received yet. Skipping")
+            return
+        
         self.home_position = self.pos
         self.home_position_gps = self.pos_gps
         self.home_yaw = self.yaw
@@ -347,10 +365,10 @@ class PX4BaseController(Node, ABC):
 
     # =======================================
     # Utility methods
-    # check & change vehicle status
+    # check & change vehicle mode
     # =======================================
 
-    # check
+    # Check Current Status
 
     def is_armed(self):
         """Check if vehicle is armed"""
@@ -382,7 +400,7 @@ class PX4BaseController(Node, ABC):
             self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER
         )
 
-    # publish
+    # Change Current Status
 
     def arm(self):
         """Arm the vehicle"""
@@ -396,10 +414,13 @@ class PX4BaseController(Node, ABC):
             VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=0.0
         )
 
+    # Note: The numbers corresponding to the custom modes are all defined in src/modules/commander/px4_custom_mode.h
+
     def set_offboard_mode(self):
         """Set vehicle to offboard mode"""
         if not self.is_offboard_mode():
-            # 1:main mode, 2:mode=offboard
+            # param1: mode flags (CUSTOM_MODE_ENABLED)
+            # param2: OFFBOARD mode
             self.publish_vehicle_command(
                 VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0
             )
@@ -407,7 +428,9 @@ class PX4BaseController(Node, ABC):
     def set_mission_mode(self):
         """Set vehicle to mission mode"""
         if not self.is_mission_mode():
-            # 1:main mode, 2:mode=mission
+            # param1: mode flags (CUSTOM_MODE_ENABLED)
+            # param2: AUTO mode 
+            # param3: AUTO_MISSION submode
             self.publish_vehicle_command(
                 VehicleCommand.VEHICLE_CMD_DO_SET_MODE,
                 param1=1.0,
@@ -415,7 +438,7 @@ class PX4BaseController(Node, ABC):
                 param3=4.0,
             )
 
-    def takeoff(self, altitude=None):
+    def takeoff(self, altitude: float = None):
         """Command takeoff"""
         if altitude is not None:
             self.publish_vehicle_command(
@@ -424,7 +447,7 @@ class PX4BaseController(Node, ABC):
         else:
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF)
 
-    def land(self, altitude=0.0):
+    def land(self, altitude: float = 0.0):
         """Command landing"""
         self.publish_vehicle_command(
             VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=altitude

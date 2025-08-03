@@ -19,7 +19,7 @@ class MissionController(PX4BaseController):
         # Mission parameters
         self.hold_time_seconds = 10.0
         self.hold_timer = 0
-        self.hold_timer_threshold = int(self.hold_time_seconds / self.time_period)
+        self.hold_timer_threshold = int(self.hold_time_seconds / self.timer_period)
         
         # State machine
         self.state = 'READY_TO_FLIGHT'
@@ -79,8 +79,8 @@ class MissionController(PX4BaseController):
             self.state = 'LANDING'
         else:
             # Log hold status every second
-            if self.hold_timer % int(1.0 / self.time_period) == 0:
-                remaining_time = (self.hold_timer_threshold - self.hold_timer) * self.time_period
+            if self.hold_timer % int(1.0 / self.timer_period) == 0:
+                remaining_time = (self.hold_timer_threshold - self.hold_timer) * self.timer_period
                 self.get_logger().info(f"Holding... {remaining_time:.1f}s remaining")
             
             self.hold_timer += 1
