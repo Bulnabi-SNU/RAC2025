@@ -4,3 +4,7 @@
 [submodule "src/px4_ros_com"]
 	path = src/px4_ros_com
 	url = https://github.com/PX4/px4_ros_com
+[submodule "RAC2025_PX4"]
+	path = px4
+	url = https://github.com/Bulnabi-SNU/RAC2025_PX4
+	branch=main
