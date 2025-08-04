@@ -3,11 +3,11 @@ import csv
 import numpy as np
 import os
 # Log format: ascii csv
-# Columns: manual(0) or auto(1) mode, event flag (= headed waypoint #), gps time (s), xyz wgs-84 coordinates (m, 0.1 acc) 
-# Create log with filename that contains the current date and time
+# Columns: manual(0) or auto(1) mode, event flag (= headed waypoint #), gps time (s), LLA coordinates
+# Creates log with filename that contains the current date and time
 
 class Logger:
-    """Logger class to handle logging of vehicle data."""
+    """Logger class to handle logging of vehicle data for judging"""
     
     def __init__(self, log_path:str = "flight_logs"):
         self.log_path = log_path
