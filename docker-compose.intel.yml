@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: dockerfiles/Dockerfile.PX4_Gazebo.intel
     container_name: rac2025_gazebo_intel
+    image: rac2025_gazebo_intel
     privileged: true
     environment:
       - DISPLAY=${DISPLAY}
@@ -23,6 +24,7 @@ services:
       context: .
       dockerfile: dockerfiles/Dockerfile.ROS2.intel
     container_name: rac2025_ros2_intel
+    image: rac2025_ros2_intel
     privileged: true
     environment:
       - DISPLAY=${DISPLAY}
