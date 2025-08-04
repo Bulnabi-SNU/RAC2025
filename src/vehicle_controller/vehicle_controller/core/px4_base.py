@@ -24,7 +24,7 @@ from px4_msgs.msg import MissionResult
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import TrajectorySetpoint
-
+from px4_msgs.msg import GimbalManagerSetAttitude
 
 import numpy as np
 from abc import ABC, abstractmethod
@@ -164,6 +164,10 @@ class PX4BaseController(Node, ABC):
 
         self.vehicle_state_publisher = self.create_publisher(
             VehicleState, "/vehicle_state", self.qos_profile
+        )
+        
+        self.gimbal_manager_set_attitude_publisher = self.create_publisher(
+            GimbalManagerSetAttitude, "/fmu/in/gimbal_manager_set_attitude"
         )
 
     def _setup_timers(self):
@@ -320,9 +324,29 @@ class PX4BaseController(Node, ABC):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
 
-    # TODO: Add functions for the messagetype GimbalManagerSetAttitude
-    # Ref: https://mavlink.io/en/messages/common.html#GIMBAL_MANAGER_SET_ATTITUDE
-    # Need to add this to the dds_topics.yaml first.
+    # TODO: Double check
+    def publish_gimbal_attitude(self, **kwargs):
+        msg = GimbalManagerSetAttitude()
+        
+        msg.origin_sysid = kwargs.get("origin_sysid", 1)
+        msg.origin_compid = kwargs.get("origin_compid", 1)
+        msg.target_system = kwargs.get("target_system", 1)
+        msg.target_component = kwargs.get("target_component", 1)
+        
+        # Only set roll and pitch lock
+        msg.flags = kwargs.get("flags", 12)
+        
+        msg.gimbal_device_id = kwargs.get("gimbal_device_id", 1)
+        
+        msg.q = list(kwargs.get("q", np.nan * np.zeros(4)))
+        
+        msg.angular_velocity_x = kwargs.get("angular_velocity_x", float("nan"))
+        msg.angular_velocity_y = kwargs.get("angular_velocity_y", float("nan"))
+        msg.angular_velocity_z = kwargs.get("angular_velocity_z", float("nan"))
+        
+        self.gimbal_manager_set_attitude_publisher(msg)
+        
+
     
     # TODO: Add helper function for MAV_CMD_DO_SET_ACTUATOR
     # or at least document usage (https://mavlink.io/en/messages/common.html#MAV_CMD_DO_SET_ACTUATOR)
@@ -459,3 +483,9 @@ class PX4BaseController(Node, ABC):
         self.publish_vehicle_command(
             VehicleCommand.VEHICLE_CMD_NAV_LAND, param7=altitude
         )
+
+    ## TODO: Add checks for parameters. This is completely awful non-checkable code.
+    def set_actuator(self,actuator_nubmer:int = 2, actuator_value: float=0.0, actuator_index: int=0):
+        params = {f"param{actuator_nubmer}":actuator_value,
+                  "param7":actuator_index}        
+        self.publish_vehicle_command(**params)
