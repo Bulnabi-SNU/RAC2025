@@ -2,6 +2,7 @@ log/
 build/
 install/
 __pycache__/
+RAC2025_PX4/
 flight_logs/*
 .devcontainer.json
 
