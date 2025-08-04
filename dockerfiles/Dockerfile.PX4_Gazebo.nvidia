@@ -31,8 +31,7 @@ RUN wget -q -O- https://packagecloud.io/dcommander/virtualgl/gpgkey | \
 # Create a non-root user
 RUN useradd -m -s /bin/bash bulnabi && \
     usermod -aG sudo bulnabi && \
-    echo "bulnabi ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    chown -R bulnabi:bulnabi /PX4-Autopilot 
+    echo "bulnabi ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Switch to non-root user
 USER bulnabi
