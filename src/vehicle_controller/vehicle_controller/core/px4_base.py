@@ -106,6 +106,9 @@ class PX4BaseController(Node, ABC):
         self.home_position_gps = np.array([0.0, 0.0, 0.0])
         self.home_yaw = 0.0
 
+        # Offboard setpoint publishing
+        self.blocking_setpoint_publish = False
+
         # Mission variables
         self.mission_result = None
         self.mission_wp_num = None
@@ -203,6 +206,13 @@ class PX4BaseController(Node, ABC):
 
         # Publish offboard control mode (can be overridden via setting offboard_control_mode_params)
         self.publish_offboard_control_mode(**self.offboard_control_mode_params)
+
+        # check if blocking setpoint publish or not
+        self.blocking_setpoint_publish = not (  self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_MISSION or
+                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_OFFBOARD or
+                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF or
+                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LAND or
+                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER )
 
     def _main_timer_callback(self):
         """Main timer callback - calls the abstract main_loop method"""
@@ -335,6 +345,9 @@ class PX4BaseController(Node, ABC):
 
     def publish_setpoint(self, **kwargs):
         """Publish trajectory setpoint (relative to home position)"""
+        if self.blocking_setpoint_publish:
+            return
+        
         msg = TrajectorySetpoint()
         msg.position = list(
             kwargs.get("pos_sp", np.nan * np.zeros(3)) + self.home_position
