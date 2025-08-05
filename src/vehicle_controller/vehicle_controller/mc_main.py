@@ -388,6 +388,14 @@ class MissionController(PX4BaseController):
         # Could add position monitoring here
         pass
 
+    def on_attitude_update(self, msg):
+        """Stabilize gimbal manually (for gazebo only, this is a placeholder)"""
+        if False:
+            return
+
+
+
+
     def on_global_position_update(self, msg):
         """Override to handle global position updates"""
         # Could add GPS monitoring here
