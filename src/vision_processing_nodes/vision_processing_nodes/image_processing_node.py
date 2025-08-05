@@ -48,7 +48,7 @@ class ImageProcessor(Node):
         : real camera or Gazebo camera
         """
         if use_gazebo:
-            self.topicNameFrames = "/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image"     # Change to for real camera'topic_camera_image'
+            self.topicNameFrames = "/world/RAC_2025/model/standard_vtol_gimbal_0/link/camera_link/sensor/camera/image"     # Change to for real camera'topic_camera_image'
         else:
             self.topicNameFrames = "topic_camera_image"  # Change to for real camera'topic_camera_image'
         

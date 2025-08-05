@@ -8,7 +8,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from enum import Enum
 
 from vehicle_controller.core.px4_base import PX4BaseController
-from vehicle_controller.core.drone_target_controller import DroneTargetController
+from vehicle_controller.core.drone_target_controller_modified import DroneTargetController
 from vehicle_controller.core.logger import Logger
 
 # import px4_msgs
@@ -45,9 +45,9 @@ class MissionController(PX4BaseController):
                 ('track_min_altitude', 4.0),
                 ('gripper_altitude', 0.3),
                 ('tracking_target_offset', 0.35),
-                ('tracking_acceptance_radius_xy', 0.2),
+                ('tracking_acceptance_radius_xy', 0.05),
                 ('tracking_acceptance_radius_z', 0.2),
-                ('detect_target_type', 1),
+                ('detect_target_type', 3),
             ])
 
         # Mission parameters
@@ -77,7 +77,7 @@ class MissionController(PX4BaseController):
         # Offboard controller
 
         self.drone_target_controller = DroneTargetController(
-                target_offset=self.tracking_target_offset, 
+                target_distance=self.tracking_target_offset, 
                 target_altitude=self.track_min_altitude, 
                 acceptance_radius=self.tracking_acceptance_radius_xy)
 
@@ -146,7 +146,6 @@ class MissionController(PX4BaseController):
         next_setpoint, arrived = self.drone_target_controller.update(
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
         )
-        self.get_logger().info(f"{self.target.angle_x}, {self.target.angle_y} ")
         self.publish_setpoint(pos_sp=next_setpoint)
 
         if arrived:
