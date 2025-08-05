@@ -8,7 +8,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from enum import Enum
 
 from vehicle_controller.core.px4_base import PX4BaseController
-from vehicle_controller.core.drone_target_controller_modified import DroneTargetController
+from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 
 # import px4_msgs
@@ -77,7 +77,7 @@ class MissionController(PX4BaseController):
         # Offboard controller
 
         self.drone_target_controller = DroneTargetController(
-                target_distance=self.tracking_target_offset, 
+                target_offset=self.tracking_target_offset, 
                 target_altitude=self.track_min_altitude, 
                 acceptance_radius=self.tracking_acceptance_radius_xy)
 

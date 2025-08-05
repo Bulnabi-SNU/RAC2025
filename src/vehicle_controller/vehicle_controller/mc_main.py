@@ -1,6 +1,7 @@
 __author__ = "PresidentPlant"
 __contact__ = ""
 
+import time
 import rclpy
 # from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
@@ -417,50 +418,8 @@ class MissionController(PX4BaseController):
             """
             Normalize a quaternion
             """
-            return q / np.linalg.norm(q)
+            return q /np.linalg.norm(q) 
         
-        def euler_to_quaternion(roll, pitch, yaw):
-            """
-            Convert Euler angles (in radians) to quaternion
-            """
-            cr = np.cos(roll * 0.5)
-            sr = np.sin(roll * 0.5)
-            cp = np.cos(pitch * 0.5)
-            sp = np.sin(pitch * 0.5)
-            cy = np.cos(yaw * 0.5)
-            sy = np.sin(yaw * 0.5)
-            
-            w = cr * cp * cy + sr * sp * sy
-            x = sr * cp * cy - cr * sp * sy
-            y = cr * sp * cy + sr * cp * sy
-            z = cr * cp * sy - sr * sp * cy
-            
-            return np.array([w, x, y, z])
-        
-        def quaternion_to_euler(q):
-            """
-            Convert quaternion to Euler angles (roll, pitch, yaw) in radians
-            """
-            w, x, y, z = q
-            
-            # Roll (x-axis rotation)
-            sinr_cosp = 2 * (w * x + y * z)
-            cosr_cosp = 1 - 2 * (x * x + y * y)
-            roll = np.arctan2(sinr_cosp, cosr_cosp)
-            
-            # Pitch (y-axis rotation)
-            sinp = 2 * (w * y - z * x)
-            if abs(sinp) >= 1:
-                pitch = np.copysign(np.pi / 2, sinp)  # Use 90 degrees if out of range
-            else:
-                pitch = np.arcsin(sinp)
-            
-            # Yaw (z-axis rotation)
-            siny_cosp = 2 * (w * z + x * y)
-            cosy_cosp = 1 - 2 * (y * y + z * z)
-            yaw = np.arctan2(siny_cosp, cosy_cosp)
-            
-            return roll, pitch, yaw
         
         def calculate_gimbal_quaternion(q_drone):
             """
@@ -475,30 +434,39 @@ class MissionController(PX4BaseController):
                 q_gimbal: numpy array [w, x, y, z] representing gimbal quaternion
             """
             # Normalize input quaternion
+            #q_drone = [1,0,0,0]
             q_drone = quaternion_normalize(q_drone)
+
+            #q_final = quaternion_multiply([np.cos(self.yaw/2),0.0,.0,-np.sin(self.yaw/2)] ,[1,0,0.0,0])
+            q_final = [1.0,0.,0.,0.]
             
             # Extract yaw from drone quaternion
-            roll_drone, pitch_drone, yaw_drone = quaternion_to_euler(q_drone)
+            # roll_drone, pitch_drone, yaw_drone = quaternion_to_euler(q_drone)
             
             # Create desired final quaternion: roll=0, pitch=-90°, yaw=same as drone
-            q_final = euler_to_quaternion(0, -np.pi/2, yaw_drone)
-            q_final = quaternion_normalize(q_final)
+            #q_final = euler_to_quaternion(0, -np.pi/2, yaw_drone)
+            q_final = q_final
             
             # Calculate gimbal quaternion: q_gimbal = q_final * q_drone_conjugate
             q_drone_conjugate = quaternion_conjugate(q_drone)
             q_gimbal = quaternion_multiply(q_final, q_drone_conjugate)
             
-            return quaternion_normalize(q_gimbal)
+
+            # FUCK THIS SHIT GAZEBO SUCKS
+            return quaternion_normalize(np.array([0.7,0.0,-0.7,0.0]))
 
         if False:
             return
 
-        gimbal_q =  calculate_gimbal_quaternion(self.attitude_q)
-        self.get_logger().info("Publishing gimbal quaternions") 
+        gimbal_q = calculate_gimbal_quaternion(self.attitude_q)
+        #self.get_logger().info("Publishing gimbal quaternions") 
+        #print(gimbal_q)
         # If this works i'll be happy
         # self.publish_gimbal_attitude(flags=12)
 
         # Probably won't though.
+        #self.publish_gimbal_attitude(flags=12,q=[0.7,0.,-0.7,0.0])
+        #self.publish_gimbal_attitude(flags=12,q=[0.6,0.,-0.0,0.0])
         self.publish_gimbal_attitude(flags=0,q=gimbal_q)
 
     def on_global_position_update(self, msg):
