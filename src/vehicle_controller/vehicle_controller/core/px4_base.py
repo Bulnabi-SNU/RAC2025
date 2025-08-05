@@ -176,7 +176,8 @@ class PX4BaseController(Node, ABC):
         )
         
         self.gimbal_manager_set_attitude_publisher = self.create_publisher(
-            GimbalManagerSetAttitude, "/fmu/in/gimbal_manager_set_attitude"
+            GimbalManagerSetAttitude, "/fmu/in/gimbal_manager_set_attitude", 
+            self.qos_profile
         )
 
     def _setup_timers(self):
@@ -363,7 +364,7 @@ class PX4BaseController(Node, ABC):
         msg.angular_velocity_y = kwargs.get("angular_velocity_y", float("nan"))
         msg.angular_velocity_z = kwargs.get("angular_velocity_z", float("nan"))
         
-        self.gimbal_manager_set_attitude_publisher(msg)
+        self.gimbal_manager_set_attitude_publisher.publish(msg)
         
 
     
