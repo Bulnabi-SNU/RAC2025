@@ -80,6 +80,15 @@ class LandingTagDetector:
         
         return np.array([tag_center[0],tag_center[1]]), np.array([x,y,z,yaw])
 
+    def update_param(self, tag_size=None, K=None, D=None):
+        if tag_size is not None:
+            self.tag_size = tag_size
+        if K is not None:
+            self.K = K
+        if D is not None:
+            self.D = D
+            
+
 if __name__ == "__main__":
     # === Define dummy calibration (replace with your real values) ===
     K = np.array([

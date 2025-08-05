@@ -97,6 +97,23 @@ class DropTagDetector:
                 
         return np.array([cx,cy]), np.array([red_ratio])
 
+    def update_param(self, lower_red1=None, upper_red1=None, 
+                     lower_red2=None, upper_red2=None, 
+                     min_area=None, pause_threshold=None):
+        if lower_red1 is not None:
+            self.lower_red1 = lower_red1
+        if upper_red1 is not None:
+            self.upper_red1 = upper_red1
+        if lower_red2 is not None:
+            self.lower_red2 = lower_red2
+        if upper_red2 is not None:
+            self.upper_red2 = upper_red2
+        if min_area is not None:
+            self.min_area = min_area
+        if pause_threshold is not None:
+            self.pause_threshold = pause_threshold
+            
+
 # Test code for standalone usage
 if __name__ == "__main__":
     import cv2

@@ -69,6 +69,15 @@ class CasualtyDetector:
         if len(xs) == 0:
             return None
         return (int(xs.mean()), int(ys.mean()))   
+    
+    def update_param(self, lower_orange=None, upper_orange=None, min_area=None):
+        if lower_orange is not None:
+            self.lower_orange = lower_orange
+        if upper_orange is not None:
+            self.upper_orange = upper_orange
+        if min_area is not None:
+            self.min_area = min_area
+
 
 # Test code for standalone usage
 if __name__ == "__main__":
