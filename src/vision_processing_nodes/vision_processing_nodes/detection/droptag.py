@@ -112,7 +112,16 @@ class DropTagDetector:
             self.min_area = min_area
         if pause_threshold is not None:
             self.pause_threshold = pause_threshold
-            
+    
+    def print_param(self):
+        print(f"DropTagDetector Parameters:\n"
+              f"- Lower Red1: {self.lower_red1}\n"
+              f"- Upper Red1: {self.upper_red1}\n"
+              f"- Lower Red2: {self.lower_red2}\n"
+              f"- Upper Red2: {self.upper_red2}\n"
+              f"- Minimum Area: {self.min_area}\n"
+              f"- Pause Threshold: {self.pause_threshold}")
+
 
 # Test code for standalone usage
 if __name__ == "__main__":

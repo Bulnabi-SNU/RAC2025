@@ -14,6 +14,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import Image                   ### 나중에 센서 이미지 받아오는것 찾아보기 ###
+# Messages for changing params dynamically
+from rcl_interfaces.msg import SetParametersResult
 
 # import custom msg
 '''msgs for subscription to phase'''
@@ -73,6 +75,7 @@ class ImageProcessor(Node):
                 depth=1
             )
 
+        """ Parameters """
         self.declare_parameters(
             namespace='',
             parameters=[
@@ -97,7 +100,6 @@ class ImageProcessor(Node):
         ])
         
         self.do_streaming = self.get_parameter('do_streaming').value
-
 
         """ for VehicleState callback"""
         self.vehicle_state = VehicleState()
@@ -133,8 +135,9 @@ class ImageProcessor(Node):
 
         if(self.do_streaming): self.streaming_timer = self.create_timer(self.streaming_period, self.streaming_timer_callback)
 
-        # TODO: Add callback for ROS parameter change. 
-        # Probably need to add parameter update functions for each detector as well.
+        # [Parameter callback] 
+        # : for dynamically updating parameters while flying
+        self.add_on_set_parameters_callback(self.param_update_callback)
         
         '''
         2. Instantiating Different Detectors
@@ -274,7 +277,6 @@ class ImageProcessor(Node):
     #============================================
     # Streaming Related Functions
     #============================================     
-        
     
     def render_image(self, image):
         """ Function to render shapes/text onto camera feed before streaming """
@@ -317,7 +319,54 @@ class ImageProcessor(Node):
         else:
             cv2.putText(image, "No detection", (10, 30), font, font_scale, (0, 0, 255), font_thickness)
 
+    #============================================
+    # Parameter callback
+    #============================================     
 
+    def param_update_callback(self, params):
+        """ Parameter callback : for dynamically updating parameters while flying """
+        successful = True
+        reason = ''
+
+        for p in params:
+            # ────────── Casualty ──────────
+            if p.name == 'casualty_lower_orange' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.casualty_detector.lower_orange = np.array(p.value, dtype=np.float32)
+            elif p.name == 'casualty_upper_orange' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.casualty_detector.upper_orange = np.array(p.value, dtype=np.float32)
+
+            # ────────── Drop-tag ──────────
+            elif p.name == 'drop_tag_lower_red1' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.drop_tag_detector.lower_red1 = np.array(p.value, dtype=np.float32)
+            elif p.name == 'drop_tag_upper_red1' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.drop_tag_detector.upper_red1 = np.array(p.value, dtype=np.float32)
+            elif p.name == 'drop_tag_lower_red2' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.drop_tag_detector.lower_red2 = np.array(p.value, dtype=np.float32)
+            elif p.name == 'drop_tag_upper_red2' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.drop_tag_detector.upper_red2 = np.array(p.value, dtype=np.float32)
+
+            # ────────── Landing-tag ──────────
+            # elif p.name == 'landing_tag_tag_size' and p.type_ == p.Type.DOUBLE:
+            #     self.landing_tag_detector.tag_size = p.value
+            elif p.name == 'landing_tag_K' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.landing_tag_detector.K = np.reshape(np.array(p.value, dtype=np.float64), (3, 3))
+            elif p.name == 'landing_tag_D' and p.type_ == p.Type.DOUBLE_ARRAY:
+                self.landing_tag_detector.D = np.array(p.value, dtype=np.float64)
+
+            # 예상하지 못한/지원하지 않는 파라미터
+            else:
+                self.get_logger().warn(f"Ignoring unknown parameter {p.name}")
+                continue
+        
+        print("[Parameter Update] Current parameters:")
+        self.casualty_detector.print_param()
+        print("\n")
+        self.drop_tag_detector.print_param()
+        print("\n")
+        self.landing_tag_detector.print_param()
+        print("\n\n")
+
+        return SetParametersResult(successful=successful, reason=reason)
 
 #============================================
 # Main Function

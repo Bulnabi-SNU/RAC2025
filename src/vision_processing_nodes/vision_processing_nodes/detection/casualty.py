@@ -77,6 +77,12 @@ class CasualtyDetector:
             self.upper_orange = upper_orange
         if min_area is not None:
             self.min_area = min_area
+    
+    def print_param(self):
+        print("Casualty Detector Parameters:")
+        print(f"- Lower Orange: {self.lower_orange}")
+        print(f"- Upper Orange: {self.upper_orange}")
+        print(f"- Minimum Area: {self.min_area}")
 
 
 # Test code for standalone usage

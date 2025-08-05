@@ -87,6 +87,12 @@ class LandingTagDetector:
             self.K = K
         if D is not None:
             self.D = D
+    
+    def print_param(self):
+        print(f"LandingTagDetector Parameters:\n"
+              f"- Tag Size: {self.tag_size}\n"
+              f"- Camera Intrinsics (K):\n{self.K}\n"
+              f"- Distortion Coefficients (D):\n{self.D}")
             
 
 if __name__ == "__main__":
