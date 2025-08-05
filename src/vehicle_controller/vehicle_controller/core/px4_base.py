@@ -16,6 +16,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 """Messages for subscription"""
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleLocalPosition
+from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import VehicleGlobalPosition
 from px4_msgs.msg import SensorGps  # for log file, not used anywhere else
 from px4_msgs.msg import MissionResult
@@ -94,6 +95,7 @@ class PX4BaseController(Node, ABC):
         self.pos_gps = np.array([0.0, 0.0, 0.0])  # global GPS coordinates (LLA)
         self.vel = np.array([0.0, 0.0, 0.0]) # NED coordinates
         self.yaw = 0.0 # Radians
+        self.attitude_q = np.zeros(4)
 
         # Home position flags
         self.get_position_flag = False 
@@ -124,6 +126,13 @@ class PX4BaseController(Node, ABC):
             VehicleLocalPosition,
             "/fmu/out/vehicle_local_position",
             self._vehicle_local_position_callback,
+            self.qos_profile,
+        )
+
+        self.vehicle_attitude_subscriber = self.create_subscription(
+            VehicleAttitude,
+            "/fmu/out/vehicle_attitude",
+            self._vehicle_attitude_callback,
             self.qos_profile,
         )
 
@@ -167,7 +176,8 @@ class PX4BaseController(Node, ABC):
         )
         
         self.gimbal_manager_set_attitude_publisher = self.create_publisher(
-            GimbalManagerSetAttitude, "/fmu/in/gimbal_manager_set_attitude"
+            GimbalManagerSetAttitude, "/fmu/in/gimbal_manager_set_attitude", 
+            self.qos_profile
         )
 
     def _setup_timers(self):
@@ -232,6 +242,11 @@ class PX4BaseController(Node, ABC):
         
         self.on_local_position_update(msg)
 
+    def _vehicle_attitude_callback(self, msg):
+        """Callback for attitude updates"""
+        self.attitude_q = msg.q
+        self.on_attitude_update(msg)
+
     def _vehicle_global_position_callback(self, msg):
         """Callback for global position updates"""
         self.get_position_flag = True
@@ -267,6 +282,11 @@ class PX4BaseController(Node, ABC):
     def on_local_position_update(self, msg):
         """Override to handle local position updates"""
         # Could add position monitoring here
+        pass
+
+    def on_attitude_update(self, msg):
+        """Override to handle attitude updates"""
+        # Could add GPS monitoring here
         pass
 
     def on_global_position_update(self, msg):
@@ -344,7 +364,7 @@ class PX4BaseController(Node, ABC):
         msg.angular_velocity_y = kwargs.get("angular_velocity_y", float("nan"))
         msg.angular_velocity_z = kwargs.get("angular_velocity_z", float("nan"))
         
-        self.gimbal_manager_set_attitude_publisher(msg)
+        self.gimbal_manager_set_attitude_publisher.publish(msg)
         
 
     

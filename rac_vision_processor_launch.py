@@ -42,7 +42,8 @@ def generate_launch_description():
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name="gz_image_bridge",
-        arguments=['/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
+        #arguments=['/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
+        arguments=['/world/RAC_2025/model/standard_vtol_gimbal_0/link/camera_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
         output='screen',
         condition=IfCondition(use_gazebo)
     )
