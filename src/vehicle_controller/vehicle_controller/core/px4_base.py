@@ -210,9 +210,8 @@ class PX4BaseController(Node, ABC):
 
         # check if blocking setpoint publish or not
         self.blocking_setpoint_publish = not (  self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_MISSION or
-                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_OFFBOARD or
+                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD or
                                                 self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF or
-                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LAND or
                                                 self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER )
 
     def _main_timer_callback(self):
