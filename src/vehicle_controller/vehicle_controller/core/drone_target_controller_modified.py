@@ -15,60 +15,64 @@ class DroneTargetController:
         Args:
             target_distance: Desired distance behind camera (meters)
             target_altitude: Desired drone altitude (meters)
+            acceptance_radius: Radius within which the drone considers itself close enough to the target
         """
+        
+        # Initialize parameters
         self.target_distance = target_distance
         self.target_altitude = target_altitude
         self.acceptance_radius = acceptance_radius
         
-        # Smoothing parameters for gradual transitions
-        self.position_smoothing = 0.1  # Lower = smoother, higher = more responsive
-        self.altitude_smoothing = 0.05  # Separate smoothing for altitude (typically slower)
+        # Previous target positions
+        self.prev_desired_xy: Optional[np.ndarray] = None  # Previous target position for horizontal slew
+        self.prev_desired_z: Optional[float] = None  # Previous target altitude for vertical
         
-        # Previous target for smoothing
-        self.prev_target_position: Optional[np.ndarray] = None
+        # Slew-rate parameters
+        self.max_horizontal_speed = 0.001  # Maximum horizontal speed in m/s
+        self.max_vertical_speed = 0.01  # Maximum vertical speed in m/s
+        self.dt = 0.2  # Time step in seconds for control updates
     
     def calculate_target_position(self, 
-                                drone_position: np.ndarray,  # [x, y, z]
+                                drone_position: np.ndarray,  # [N, E, D] in global frame
                                 drone_yaw: float,            # radians
-                                target_angle_x: float,       # radians (right is +ve)
-                                target_angle_y: float) -> np.ndarray:  # radians (forward is +ve)
+                                target_angle_x: float,       # degrees (right position)
+                                target_angle_y: float) -> np.ndarray:  # degrees (forward position)
         """
         Calculate the target position for the drone
         
         Args:
-            drone_position: Current drone position [x, y, z] in world frame
-            drone_yaw: Current drone yaw angle (radians)
-            target_angle_x: Target angle in x direction (right positive)
-            target_angle_y: Target angle in y direction (forward positive)
+            drone_position: Current drone position [N, E, D] in global frame
+            drone_yaw: Current drone yaw angle (radians)    
+            target_angle_x: Target angle in x direction (degrees, right positive)
+            target_angle_y: Target angle in y direction (degrees, forward positive)
             
         Returns:
-            Target position [N,E,D] for the drone
+            target_local: Target position in drone's local frame [x, y, z]
+            target_world_offset: Target position offset in global frame [N, E, D]
             
         Note: Assumes target is on the ground (z=0) and camera faces straight down
         """
         
+        # Check if detection angles are valid, if not valid angles, set drone altitude to 10m
         if np.isnan(target_angle_x):
-            drone_position[2] = -15
+            drone_position[2] = -10 # NED
             return drone_position
 
-        # Convert target angles to direction vector in camera/body frame
-        # Camera points straight down, target is on ground
-        # We can calculate exact distances using trigonometry
-        drone_altitude = -drone_position[2]
-        
-        # Calculate horizontal distances to target
-        horizontal_distance_x = drone_altitude * math.tan(target_angle_x)  # right distance
-        horizontal_distance_y = drone_altitude * math.tan(target_angle_y)  # forward distance
+        drone_altitude = -drone_position[2]  # Convert to positive altitude
+        horizontal_distance_x = drone_altitude * math.tan(np.deg2rad(target_angle_x))  # right distance
+        horizontal_distance_y = drone_altitude * math.tan(np.deg2rad(target_angle_y))  # forward distance
         
         # Target position in drone's local frame (relative to drone)
         target_local = np.array([horizontal_distance_x, horizontal_distance_y, -drone_altitude])
+        print(f"Target local position: {target_local}")
+        
         # Adjust for target distance behind camera
-        target_local += np.array([0,1,0]) * self.target_distance
+        target_local += np.array([0, 1, 0]) * self.target_distance
         
         # Rotate to NED frame using yaw
-        
         cos_yaw = math.cos(drone_yaw)
         sin_yaw = math.sin(drone_yaw)
+        print(f"[Drone Pos] yaw: {drone_yaw}, cos yaw: {cos_yaw}, sin yaw: {sin_yaw}")
         
         # (x,y) to (N,E) conversion - (1,0) goes to (-sin,cos), (0,1) goes to (cos, sin)
         target_world_offset = np.array([
@@ -76,42 +80,131 @@ class DroneTargetController:
              cos_yaw * target_local[0] + sin_yaw * target_local[1],  # world E
             0                                         # world D is ignored for now
         ])
+        print(f"Target world offset: {target_world_offset}")
         
-        # Calculate horizontal distance and normalize
-        distance = np.linalg.norm(target_world_offset) 
-        norm_target_world_offset  = target_world_offset / distance
+        return target_local, target_world_offset
+    
+    
+    def horizontal_slew(self,
+                drone_position: np.ndarray,  # [x, y, z]
+                target_world_offset: np.ndarray) -> np.ndarray: # 3 dimension setpoints
+        """
+        Calculate continuous horizontal setpoints to limit acceleration and avoid overshoot
         
-        # If offset is small enough, control altitude directly 
-        if distance < 0.1:
-            if drone_altitude < 7.0:
-                # If altitude is low, limit the offset to avoid too aggressive movements
-                target_world_offset = norm_target_world_offset * 0.05
-            desired_position = drone_position + target_world_offset
-            desired_position[2] = 0.9 * drone_position[2] + (-0.1) * self.target_altitude
-        # If offset is large, control horizontal position and altitude separately
-        else:
-            step = 0.05 + 0.05 * distance  # Step size based on distance
-            step = np.clip(step, 0.05, 0.5)  # Limit min and max of step size
-            target_world_offset = norm_target_world_offset * step
-            desired_position = drone_position + target_world_offset
+        Args:
+            drone_position: Current drone position in global frame [N, E, D]
+            target_world_offset: Target position offset in global frame [N, E, D]
 
-        # # Apply smoothing if we have a previous target
-        # if self.prev_target_position is not None:
-        #     # Smooth x and y
-        #     desired_position[0] = self.prev_target_position[0] + \
-        #                         self.position_smoothing * (desired_position[0] - self.prev_target_position[0])
-        #     desired_position[1] = self.prev_target_position[1] + \
-        #                         self.position_smoothing * (desired_position[1] - self.prev_target_position[1])
-        #     # Smooth altitude separately
-        #     desired_position[2] = self.prev_target_position[2] + \
-        #                         self.altitude_smoothing * (desired_position[2] - self.prev_target_position[2])
+        Returns:
+            np.ndarray: Continuous horizontal setpoints [N, E, D]
+        """
         
-        # Store for next iteration
-        self.prev_target_position = desired_position.copy()
+        desired_xy = target_world_offset[:2] + drone_position[:2]  # Only x and y components in global frame
+        print(f"desired xy in global : {desired_xy}")
         
-        is_close = distance < self.acceptance_radius and abs(drone_position[2] - desired_position[2]) < self.acceptance_radius
+        # If previous target is NaN, initialize it
+        if self.prev_desired_xy is None:
+            self.prev_desired_xy = desired_xy.copy()
+            
+        # Calculate delta
+        delta = desired_xy - self.prev_desired_xy
+        
+        # Limit the step size based on horizontal distance
+        max_speed = 1.0 # Maximum speed in m/s
+        dt = 0.2  # Time step in seconds
+        max_delta = max_speed * dt
+        delta_norm = np.linalg.norm(delta)
+        
+        # Limit the movement delta to max_delta
+        if delta_norm > max_delta:
+            delta = (delta / delta_norm) * max_delta
+        
+        # Calculate the next setpoint
+        next_setpoint = self.prev_desired_xy + delta
+        
+        # Update the previous target position
+        self.prev_desired_xy = next_setpoint.copy()
+        
+        return np.array([next_setpoint[0], next_setpoint[1], 0])  # Return as [x, y, z]
+    
+    
+    def vertical_slew(self,
+                drone_position: np.ndarray,  # [x, y, z]
+                target_world_offset: np.ndarray) -> np.ndarray: # 3 dimension setpoints
+                
+        """
+        Calculate continuous vertical setpoints to limit acceleration and avoid overshoot
+        
+        Args:
+            drone_position: Current drone position [N, E, D]
+            target_world_offset: Target position offset in global frame [N, E, D]
+            
+        Returns:
+            np.ndarray: Continuous vertical setpoint [z]
+        """
+        
+        # Calculate the vertical delta
+        desired_z = target_world_offset[2] + drone_position[2]  # Only z component in global frame
+        print(f"desired_z : {desired_z}")
+        
+        # If previous target is NaN, initialize it
+        if self.prev_desired_z is None:
+            self.prev_desired_z = desired_z
+            
+        # Calculate delta
+        delta = desired_z - self.prev_desired_z
+        
+        # Limit the step size based on vertical distance
+        max_speed = 0.5  # Maximum vertical speed in m/s
+        dt = 0.2  # Time step in seconds
+        max_delta = max_speed * dt
+        
+        # Limit the movement delta to max_delta
+        if abs(delta) > max_delta:
+            delta = np.sign(delta) * max_delta
+            
+        # Calculate the next setpoint
+        next_setpoint = self.prev_desired_z + delta
+        
+        # Update the previous target position
+        self.prev_desired_z = next_setpoint
+        
+        return np.array([drone_position[0], drone_position[1], next_setpoint])  # Return as [x, y, z] with x and y as 0
+        
+
+    def approach_decision(self, 
+               drone_position: np.ndarray,  # [x, y, z]
+               target_world_offset: np.ndarray) -> np.ndarray:
+        """
+        Decide the approach setpoint based on current drone position and target offset
+
+        Args:
+            drone_position : Current drone position in global frame [x, y, z]
+            target_world_offset: Target position offset in global frame [N, E, D]
+
+        Returns:
+            np.ndarray: Approach setpoint [x, y, z]
+        """
+        
+        horizontal_distance = np.linalg.norm(target_world_offset[:2])  # Only x and y components
+        vertical_distance = abs(target_world_offset[2])  # Only z component
+        
+        # If the horizontal distance is greater than acceptance radius, use horizontal slew
+        if horizontal_distance > self.acceptance_radius:
+            desired_position = self.horizontal_slew(drone_position, target_world_offset)
+        elif vertical_distance > self.acceptance_radius:
+            desired_position = self.vertical_slew(drone_position, target_world_offset)
+        else:
+            desired_position = drone_position.copy()  # No movement needed
+        
+        is_close = horizontal_distance < self.acceptance_radius and vertical_distance < self.acceptance_radius
+        
+        if is_close:
+            print("Drone is close enough to the target.")
+            
         return desired_position, is_close
     
+
     def update(self, 
                drone_position: np.ndarray,  # [x, y, z]
                drone_yaw: float,            # radians
@@ -130,38 +223,12 @@ class DroneTargetController:
             Target position [x, y, z] for drone controller
         """
         
-                
-        drone_yaw = drone_yaw # CAlready in rad
-        target_angle_x = math.radians(target_angle_x)  # Convert to radians
-        target_angle_y = math.radians(target_angle_y)  # Convert to radians
-        
-        return self.calculate_target_position(drone_position, drone_yaw, target_angle_x, target_angle_y)
+        target_local, target_world_offset = self.calculate_target_position(
+            drone_position, drone_yaw, target_angle_x, target_angle_y
+        )
+        return self.approach_decision(drone_position, target_world_offset)
     
     def reset(self):
         """Reset the controller state"""
-        self.prev_target_position = None
-    
-    def set_parameters(self, target_distance: Optional[float] = None, 
-                      target_altitude: Optional[float] = None,
-                      acceptance_radius: Optional[float] = None,
-                      position_smoothing: Optional[float] = None,
-                      altitude_smoothing: Optional[float] = None):
-        """
-        Update controller parameters
-        
-        Args:
-            target_distance: Distance behind camera (meters)
-            target_altitude: Target altitude (meters)  
-            position_smoothing: Position smoothing factor (0-1)
-            altitude_smoothing: Altitude smoothing factor (0-1)
-        """
-        if target_distance is not None:
-            self.target_distance = target_distance
-        if target_altitude is not None:
-            self.target_altitude = target_altitude
-        if position_smoothing is not None:
-            self.position_smoothing = max(0.01, min(1.0, position_smoothing))
-        if altitude_smoothing is not None:
-            self.altitude_smoothing = max(0.01, min(1.0, altitude_smoothing))
-        if acceptance_radius is not None:
-            self.acceptance_radius = acceptance_radius
+        self.prev_desired_xy = None
+        self.prev_desired_z = None
