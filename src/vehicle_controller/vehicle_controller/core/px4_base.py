@@ -196,6 +196,7 @@ class PX4BaseController(Node, ABC):
         """Heartbeat callback to maintain offboard mode"""
         now = self.get_clock().now()
         if self.last_heartbeat_time is not None:
+            # TODO: are heartbeats really 1ns apart?
             delta = (now - self.last_heartbeat_time).nanoseconds / 1e9
             if delta > 1.0:
                 self.get_logger().warn(f"Heartbeat delay detected: {delta:.3f}s")
@@ -348,22 +349,25 @@ class PX4BaseController(Node, ABC):
     def publish_gimbal_attitude(self, **kwargs):
         msg = GimbalManagerSetAttitude()
         
-        msg.origin_sysid = kwargs.get("origin_sysid", 1)
-        msg.origin_compid = kwargs.get("origin_compid", 1)
-        msg.target_system = kwargs.get("target_system", 1)
-        msg.target_component = kwargs.get("target_component", 1)
+        msg.origin_sysid = kwargs.get("origin_sysid", 0)
+        msg.origin_compid = kwargs.get("origin_compid", 0)
+        msg.target_system = kwargs.get("target_system", 0)
+        msg.target_component = kwargs.get("target_component", 0)
         
         # Only set roll and pitch lock
-        msg.flags = kwargs.get("flags", 12)
+        msg.flags = kwargs.get("flags",12 )
         
-        msg.gimbal_device_id = kwargs.get("gimbal_device_id", 1)
+        msg.gimbal_device_id = kwargs.get("gimbal_device_id", 0)
         
         msg.q = list(kwargs.get("q", np.nan * np.zeros(4)))
+
+        msg.angular_velocity_x = kwargs.get("angular_velocity_x", float(1))
+        msg.angular_velocity_y = kwargs.get("angular_velocity_y", float(1))
+        msg.angular_velocity_z = kwargs.get("angular_velocity_z", float(1))
+
         
-        msg.angular_velocity_x = kwargs.get("angular_velocity_x", float("nan"))
-        msg.angular_velocity_y = kwargs.get("angular_velocity_y", float("nan"))
-        msg.angular_velocity_z = kwargs.get("angular_velocity_z", float("nan"))
-        
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+
         self.gimbal_manager_set_attitude_publisher.publish(msg)
         
 
