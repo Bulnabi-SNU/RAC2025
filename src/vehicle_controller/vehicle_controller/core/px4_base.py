@@ -246,9 +246,9 @@ class PX4BaseController(Node, ABC):
         self.yaw = msg.heading
          
         # If home is set then make self.pos relative to home,
-        # instead of the EKF2-module start location
+        # instead of the EKF2-module start location, except for altitude.
         if self.get_position_flag and self.home_set_flag:
-            self.pos = self.pos - self.home_position
+            self.pos[:2] = self.pos[:2] - self.home_position[:2]
         
         self.on_local_position_update(msg)
 

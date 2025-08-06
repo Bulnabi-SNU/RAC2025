@@ -111,7 +111,7 @@ class MissionController(PX4BaseController):
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=self.detect_target_type
+                detect_target_type=2
                 ),
             )
 
@@ -139,7 +139,7 @@ class MissionController(PX4BaseController):
 
     def _handle_track_target(self, nextState: MissionState):
         """Track target using vision and transition to next state when arrived"""
-        if self.target is None:
+        if self.target is None or self.target.status != 0:
             self.get_logger().warn("No target coordinates available, waiting for CV detection")
             return
 

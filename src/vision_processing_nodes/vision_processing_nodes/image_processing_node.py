@@ -178,6 +178,7 @@ class ImageProcessor(Node):
         if self.last_image is None:
             self.get_logger().warn("No image received yet, skipping processing")
             return
+
         
         if self.vehicle_state.detect_target_type == 0:
             return  # Skip processing if no detection is required
