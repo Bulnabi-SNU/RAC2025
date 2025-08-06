@@ -28,11 +28,17 @@ class LandingTagDetector:
         det_params   = cv2.aruco.DetectorParameters()
         detector     = cv2.aruco.ArucoDetector(dictionary, det_params)
 
+        kernel_size = 9
+        clahe_clip = 2.0
+        
         # Gray scale conversion
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred    = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
+        clahe      = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
+        enhanced   = clahe.apply(blurred)
 
         # 태그 검출
-        corners, ids, rejected = detector.detectMarkers(gray_image)
+        corners, ids, rejected = detector.detectMarkers(enhanced)
         if ids is None or len(ids) == 0:
             return None, None
         
