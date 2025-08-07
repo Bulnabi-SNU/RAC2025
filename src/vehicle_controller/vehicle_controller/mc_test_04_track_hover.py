@@ -77,7 +77,7 @@ class MissionController(PX4BaseController):
         # Offboard controller
 
         self.drone_target_controller = DroneTargetController(
-                target_distance=self.tracking_target_offset, 
+                target_offset=self.tracking_target_offset, 
                 target_altitude=self.track_min_altitude, 
                 acceptance_radius=self.tracking_acceptance_radius_xy)
 
@@ -171,7 +171,6 @@ class MissionController(PX4BaseController):
             self.state=nextState
 
     def _handle_gripper_close(self):
-        
         """Close gripper to pick up casualty"""
         # TODO: Implement gripper control
         
