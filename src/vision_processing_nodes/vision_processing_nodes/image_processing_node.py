@@ -99,6 +99,9 @@ class ImageProcessor(Node):
                 ('landing_tag_D', [-0.090292, 0.052332, 0.000171, 0.006618, 0.0])
         ])
         
+        self.horizontal_fov = 123
+        self.vertical_fov = 123
+
         self.do_streaming = self.get_parameter('do_streaming').value
 
         """ for VehicleState callback"""
@@ -198,7 +201,7 @@ class ImageProcessor(Node):
         targetLocation.status = self.detection_status
         # TODO: SET ROS PARAMETERS for fov 
         targetLocation.angle_x, targetLocation.angle_y = \
-            pixel_to_fov(self.detection_cx, self.detection_cy, w, h,81,93)
+            pixel_to_fov(self.detection_cx, self.detection_cy, w, h,114,159)
         
         self.target_pub.publish(targetLocation)
     

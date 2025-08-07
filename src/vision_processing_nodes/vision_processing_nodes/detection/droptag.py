@@ -67,7 +67,7 @@ class DropTagDetector:
 
         # Get ratio of red pixels. If too much, stop tracking entirely (hopefully not needed?)
         red_ratio = cv2.countNonZero(combined_mask) / combined_mask.size
-        if(red_ratio > self.pause_threshold): return None
+        if(red_ratio > self.pause_threshold): return None, None
        
         # Clean up noise
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))

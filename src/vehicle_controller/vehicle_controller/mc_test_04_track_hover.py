@@ -8,7 +8,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from enum import Enum
 
 from vehicle_controller.core.px4_base import PX4BaseController
-from vehicle_controller.core.drone_target_controller_modified import DroneTargetController
+from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 
 # import px4_msgs
@@ -41,7 +41,7 @@ class MissionController(PX4BaseController):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('mission_altitude', 15.0),
+                ('mission_altitude', 10.0),
                 ('track_min_altitude', 4.0),
                 ('gripper_altitude', 0.3),
                 ('tracking_target_offset', 0.35),
@@ -139,29 +139,39 @@ class MissionController(PX4BaseController):
 
     def _handle_track_target(self, nextState: MissionState):
         """Track target using vision and transition to next state when arrived"""
+
+        # TODO: (Maybe) add logic to make it so that intermittent losses (e.g. loss for 1-2 frames) is ignored.
+        # Only continuous loss of target should be seen as fatal. 
+
         if self.target is None or self.target.status != 0:
             self.get_logger().warn("No target coordinates available, waiting for CV detection")
             return
 
-        next_setpoint, arrived = self.drone_target_controller.update(
+        target_pos, arrived = self.drone_target_controller.update(
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
         )
-        self.publish_setpoint(pos_sp=next_setpoint)
+
+        self.publish_setpoint(pos_sp = target_pos)
 
         if arrived:
+            self.drone_target_controller.reset()
             self.state = nextState
 
     def _handle_descend(self, nextState: MissionState):
         """Descend to casualty pickup position"""
         # Set position setpoint to pickup altitude
+        # NOTE: you can use slewing if it's needed. 
         pickup_pos = np.array([self.pos[0], self.pos[1], 0])
         self.publish_setpoint(pos_sp=pickup_pos)
 
         # Check if at pickup altitude
         if -self.pos[2] < self.gripper_altitude:
+            # Stop moving
+            self.publish_setpoint(pos_sp=self.pos)
             self.state=nextState
 
     def _handle_gripper_close(self):
+        
         """Close gripper to pick up casualty"""
         # TODO: Implement gripper control
         
