@@ -75,6 +75,8 @@ RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyri
 
 RUN pip install --upgrade pip && pip install pylint black && pip install --upgrade "setuptools<66"
 
+RUN apt-get install -y ros-humble-cv-bridge
+
 # Create a non-root user
 RUN useradd -m -s /bin/bash bulnabi && \
     usermod -aG sudo bulnabi && \
