@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  ros2:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.ROS2.jetson
+    container_name: rac2025_ros2
+    image: rac2025_ros2
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ./:/workspace
+    devices:
+      - /dev/dri
+      - "/dev/video0:/dev/video0"
+    group_add:
+      - video
+    network_mode: host
+    stdin_open: true
+    tty: true
