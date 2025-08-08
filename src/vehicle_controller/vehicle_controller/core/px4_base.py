@@ -127,7 +127,7 @@ class PX4BaseController(Node, ABC):
 
         self.vehicle_local_position_subscriber = self.create_subscription(
             VehicleLocalPosition,
-            "/fmu/out/vehicle_local_position",
+            "/fmu/out/vehicle_local_position_v1",
             self._vehicle_local_position_callback,
             self.qos_profile,
         )
@@ -209,6 +209,8 @@ class PX4BaseController(Node, ABC):
         self.publish_offboard_control_mode(**self.offboard_control_mode_params)
 
         # check if blocking setpoint publish or not
+
+        # NOTE: Why the hell is auto loiter, takeoff, and mission in here? Huh?
         self.blocking_setpoint_publish = not (  self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_MISSION or
                                                 self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD or
                                                 self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF or

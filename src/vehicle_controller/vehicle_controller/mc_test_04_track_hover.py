@@ -186,7 +186,7 @@ class MissionController(PX4BaseController):
         ascend_pos = np.array([self.pos[0], self.pos[1], -self.mission_altitude])
         self.publish_setpoint(pos_sp=ascend_pos)
 
-        if abs(self.pos[2] - self.mission_altitude) < 0.2:
+        if abs(self.pos[2] - self.mission_altitude) < self.tracking_acceptance_radius_z:
             self.state = MissionState.DONE
             self.get_logger().info("Done ascending.")
 

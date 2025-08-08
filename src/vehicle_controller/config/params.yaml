@@ -2,7 +2,7 @@
   ros__parameters:
     do_logging: False
 
-    mission_altitude: 15.0  # normal mission altitude
+    mission_altitude: 10.0  # normal mission altitude
     track_min_altitude: 4.0 # min altitude for tracking - just blind descend from here
     gripper_altitude: 0.3  # altitude for pickup/dropoff 
 

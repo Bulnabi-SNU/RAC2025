@@ -113,9 +113,9 @@ class MissionController(PX4BaseController):
         self.tracking_acceptance_radius_xy = \
             self.get_parameter('tracking_acceptance_radius_xy').value
         self.tracking_acceptance_radius_z = \
-            self.get_parameter('tracking_acceptance_radius_z')
+            self.get_parameter('tracking_acceptance_radius_z').value
             
-        self.do_log_flight = self.get_parameter('do_logging')
+        self.do_log_flight = self.get_parameter('do_logging').value
     
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -190,6 +190,8 @@ class MissionController(PX4BaseController):
 
     def on_target_update(self, msg):
         """Callback for target coordinates from image_processing_node"""
+        
+        # NOTE: Why the hell is this here? lmao
         if msg is not None:
             self.target = msg
         else:
@@ -206,6 +208,7 @@ class MissionController(PX4BaseController):
             return
 
         self.set_home_position()
+
         if self.home_set_flag:
             self.get_logger().info("Home position set, ready for offboard mode")
             self.state = MissionState.OFFBOARD_ARM
@@ -235,7 +238,7 @@ class MissionController(PX4BaseController):
 
     def _handle_mission_continue(self):
         """Continue mission from paused waypoint"""
-        # TODO: Debate whether to remove this?
+        # TODO: Debate whether to remove this? Probably should. Doesn't really mean much.
         self.get_logger().info(
             f"Resuming mission from waypoint {self.mission_paused_waypoint}"
         )
@@ -276,26 +279,34 @@ class MissionController(PX4BaseController):
 
     def _handle_track_target(self, nextState: MissionState):
         """Track target using vision and transition to next state when arrived"""
-        if self.target is None:
+        # TODO: (Maybe) add logic to make it so that intermittent losses (e.g. loss for 1-2 frames) is ignored.
+        # Only continuous loss of target should be seen as fatal. 
+
+        if self.target is None or self.target.status != 0:
             self.get_logger().warn("No target coordinates available, waiting for CV detection")
             return
 
-        next_setpoint, arrived = self.drone_target_controller.update(
+        target_pos, arrived = self.drone_target_controller.update(
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
         )
-        self.publish_setpoint(pos_sp=next_setpoint)
+
+        self.publish_setpoint(pos_sp = target_pos)
 
         if arrived:
+            self.drone_target_controller.reset()
             self.state = nextState
 
     def _handle_descend(self, nextState: MissionState, descendAlt: float = 0.5):
         """Descend to casualty pickup position"""
         # Set position setpoint to pickup altitude
+        # NOTE: you can use slewing if it's needed. 
         pickup_pos = np.array([self.pos[0], self.pos[1], 0])
         self.publish_setpoint(pos_sp=pickup_pos)
 
         # Check if at pickup altitude
         if -self.pos[2] < descendAlt:
+            # Stop moving
+            self.publish_setpoint(pos_sp=self.pos)
             self.state=nextState
 
     def _handle_gripper_close(self):
