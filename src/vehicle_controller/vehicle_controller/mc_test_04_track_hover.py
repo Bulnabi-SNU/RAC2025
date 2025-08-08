@@ -28,8 +28,8 @@ class MissionState(Enum):
     INIT = "INIT"
     TRACK = "TRACK"
     DESCEND = "DESCEND"
-    GRIPPER_CLOSE = "GRIPPER_CLOSE"
-    ASCEND = "ASCEND"
+    # GRIPPER_CLOSE = "GRIPPER_CLOSE"
+    # ASCEND = "ASCEND"
     DONE = "DONE"
 
 class MissionController(PX4BaseController):
@@ -96,11 +96,11 @@ class MissionController(PX4BaseController):
         elif self.state == MissionState.TRACK:
             self._handle_track_target(MissionState.DESCEND)
         elif self.state == MissionState.DESCEND:
-            self._handle_descend(MissionState.GRIPPER_CLOSE)
-        elif self.state == MissionState.GRIPPER_CLOSE:
-            self._handle_gripper_close()
-        elif self.state == MissionState.ASCEND:
-            self._handle_ascend()
+            self._handle_descend(MissionState.DONE) # GRIPPER_CLOSE -> DONE
+        # elif self.state == MissionState.GRIPPER_CLOSE:
+        #     self._handle_gripper_close()
+        # elif self.state == MissionState.ASCEND:
+        #     self._handle_ascend()
         elif self.state == MissionState.DONE:
             pass
             
