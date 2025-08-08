@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -37,6 +37,14 @@ def generate_launch_description():
         output='screen'
     )
     
+    # Image processing node with conditional executable name
+    camera_publisher_node = Node(
+        package='vision_processing_nodes',
+        executable='camera_publisher_node',
+        output='screen',
+        condition=UnlessCondition(use_gazebo)
+    )
+
     # ROS-Gazebo bridge node (only runs when use_gazebo is true)
     gz_bridge_node = Node(
         package='ros_gz_bridge',
@@ -52,4 +60,5 @@ def generate_launch_description():
         use_gazebo_arg,
         image_processing_node,
         gz_bridge_node,
+        camera_publisher_node
     ])

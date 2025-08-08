@@ -119,9 +119,9 @@ def main(args=None):
     #============================================
     # Choose 'camera' or 'video' mode for testing
     #============================================
-    mode = 'video'  # or 'camera'
+    mode = 'camera'  # or 'camera'
     video_path = '/workspace/src/vision_processing_nodes/vision_processing_nodes/videos/droptag_video.mov'
-    node = ImagePublisher(mode=mode, video_path=video_path)
+    node = ImagePublisher(mode=mode)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
