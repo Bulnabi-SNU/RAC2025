@@ -13,20 +13,26 @@ import cv2
 
 class CasualtyDetector:
     def __init__(self, 
-                 lower_orange:np.ndarray=np.array([5, 150, 150]), 
-                 upper_orange:np.ndarray=np.array([20, 255, 255]), 
+                 lower_red1:np.ndarray=np.array([0, 150, 150]),
+                 upper_red1:np.ndarray=np.array([10, 255, 255]),
+                 lower_red2:np.ndarray=np.array([170, 150, 150]),
+                 upper_red2:np.ndarray=np.array([180, 255, 255]),
                  min_area:float=500.0):
         """
-        Initialize Casualty Detector for orange basket detection
+        Initialize Casualty Detector for red basket detection
         
         Args:
-            lower_orange (numpy.ndarray): Lower HSV threshold for orange color
-            upper_orange (numpy.ndarray): Upper HSV threshold for orange color  
+            lower_red1 (numpy.ndarray): Lower HSV threshold for red color (0-10)
+            upper_red1 (numpy.ndarray): Upper HSV threshold for red color (0-10)
+            lower_red2 (numpy.ndarray): Lower HSV threshold for red color (170-180)
+            upper_red2 (numpy.ndarray): Upper HSV threshold for red color (170-180)
             min_area (int): Minimum contour area for valid detection
         """
-        # Default orange color range in HSVs
-        self.lower_orange = lower_orange
-        self.upper_orange = upper_orange
+        # Default red color range in HSVs
+        self.lower_red1 = lower_red1
+        self.upper_red1 = upper_red1
+        self.lower_red2 = lower_red2
+        self.upper_red2 = upper_red2
         self.min_area = min_area
 
     def detect_casualty(self, image):
@@ -42,10 +48,12 @@ class CasualtyDetector:
         # z, yaw, height는 필요에 따라 조정
         return np.array([cx, cy]), None
     
-    def detect_casualty_close(self,frame):
+    def detect_casualty_close(self, frame):
         """가까이용: 면적이 충분한 가장 큰 컨투어 중심 반환"""
         hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self.lower_orange, self.upper_orange)
+        mask1 = cv2.inRange(hsv, self.lower_red1, self.upper_red1)
+        mask2 = cv2.inRange(hsv, self.lower_red2, self.upper_red2)
+        mask = cv2.bitwise_or(mask1, mask2)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -61,27 +69,36 @@ class CasualtyDetector:
         cy = int(M['m01']/M['m00'])
         return (cx, cy)
 
-    def detect_casualty_far(self,frame):
+    def detect_casualty_far(self, frame):
         """멀리용: 마스크된 모든 픽셀의 평균 좌표 반환"""
         hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self.lower_orange, self.upper_orange)
+        mask1 = cv2.inRange(hsv, self.lower_red1, self.upper_red1)
+        mask2 = cv2.inRange(hsv, self.lower_red2, self.upper_red2)
+        mask = cv2.bitwise_or(mask1, mask2)
         ys, xs = np.where(mask > 0)
         if len(xs) == 0:
             return None
         return (int(xs.mean()), int(ys.mean()))   
     
-    def update_param(self, lower_orange=None, upper_orange=None, min_area=None):
-        if lower_orange is not None:
-            self.lower_orange = lower_orange
-        if upper_orange is not None:
-            self.upper_orange = upper_orange
+    def update_param(self, lower_red1=None, upper_red1=None,
+                     lower_red2=None, upper_red2=None, min_area=None):
+        if lower_red1 is not None:
+            self.lower_red1 = lower_red1
+        if upper_red1 is not None:
+            self.upper_red1 = upper_red1
+        if lower_red2 is not None:
+            self.lower_red2 = lower_red2
+        if upper_red2 is not None:
+            self.upper_red2 = upper_red2
         if min_area is not None:
             self.min_area = min_area
     
     def print_param(self):
         print("Casualty Detector Parameters:")
-        print(f"- Lower Orange: {self.lower_orange}")
-        print(f"- Upper Orange: {self.upper_orange}")
+        print(f"- Lower Red1: {self.lower_red1}")
+        print(f"- Upper Red1: {self.upper_red1}")
+        print(f"- Lower Red2: {self.lower_red2}")
+        print(f"- Upper Red2: {self.upper_red2}")
         print(f"- Minimum Area: {self.min_area}")
 
 
@@ -110,11 +127,11 @@ if __name__ == "__main__":
         # Perform detection
         detection = detector.detect_casualty(frame)
         
-        if detection:
+        if detection and detection[0] is not None:
             # Draw detection result on frame
-            cx, cy =detection[0],detection[1]
+            cx, cy = detection[0]
             cv2.circle(frame, (cx, cy), 10, (0, 255, 0), 2)
-            cv2.putText(frame, f"Orange: ({cx}, {cy})", (cx + 15, cy), 
+            cv2.putText(frame, f"Red: ({cx}, {cy})", (cx + 15, cy), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             
             print(f"Casualty detected: pixel=({cx}, {cy})")
