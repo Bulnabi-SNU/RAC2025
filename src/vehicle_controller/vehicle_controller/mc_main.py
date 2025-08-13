@@ -403,83 +403,10 @@ class MissionController(PX4BaseController):
     def on_attitude_update(self, msg):
         """Stabilize gimbal manually (for gazebo only, this is a placeholder)"""
 
-        def quaternion_multiply(q1, q2):
-            """
-            Multiply two quaternions q1 * q2
-            Quaternions are in format [w, x, y, z]
-            """
-            w1, x1, y1, z1 = q1
-            w2, x2, y2, z2 = q2
-            
-            return np.array([
-                w1*w2 - x1*x2 - y1*y2 - z1*z2,  # w
-                w1*x2 + x1*w2 + y1*z2 - z1*y2,  # x
-                w1*y2 - x1*z2 + y1*w2 + z1*x2,  # y
-                w1*z2 + x1*y2 - y1*x2 + z1*w2   # z
-            ])
-        
-        def quaternion_conjugate(q):
-            """
-            Calculate the conjugate of a quaternion
-            """
-            w, x, y, z = q
-            return np.array([w, -x, -y, -z])
-        
-        def quaternion_normalize(q):
-            """
-            Normalize a quaternion
-            """
-            return q /np.linalg.norm(q) 
-        
-        
-        def calculate_gimbal_quaternion(q_drone):
-            """
-            Calculate the gimbal quaternion q_gimbal such that:
-            q_gimbal * q_drone = q_final
-            where q_final has pitch = -90° and same yaw as q_drone
-            
-            Args:
-                q_drone: numpy array [w, x, y, z] representing drone quaternion
-            
-            Returns:
-                q_gimbal: numpy array [w, x, y, z] representing gimbal quaternion
-            """
-            # Normalize input quaternion
-            #q_drone = [1,0,0,0]
-            q_drone = quaternion_normalize(q_drone)
-
-            #q_final = quaternion_multiply([np.cos(self.yaw/2),0.0,.0,-np.sin(self.yaw/2)] ,[1,0,0.0,0])
-            q_final = [1.0,0.,0.,0.]
-            
-            # Extract yaw from drone quaternion
-            # roll_drone, pitch_drone, yaw_drone = quaternion_to_euler(q_drone)
-            
-            # Create desired final quaternion: roll=0, pitch=-90°, yaw=same as drone
-            #q_final = euler_to_quaternion(0, -np.pi/2, yaw_drone)
-            q_final = q_final
-            
-            # Calculate gimbal quaternion: q_gimbal = q_final * q_drone_conjugate
-            q_drone_conjugate = quaternion_conjugate(q_drone)
-            q_gimbal = quaternion_multiply(q_final, q_drone_conjugate)
-            
-
-            # FUCK THIS SHIT GAZEBO SUCKS
-            return quaternion_normalize(np.array([0.7,0.0,-0.7,0.0]))
-
-        if False:
-            return
-
-        gimbal_q = calculate_gimbal_quaternion(self.attitude_q)
-        #self.get_logger().info("Publishing gimbal quaternions") 
-        #print(gimbal_q)
-        # If this works i'll be happy
-        # self.publish_gimbal_attitude(flags=12)
-
-        # Probably won't though.
-        #self.publish_gimbal_attitude(flags=12,q=[0.7,0.,-0.7,0.0])
-        #self.publish_gimbal_attitude(flags=12,q=[0.6,0.,-0.0,0.0])
-        self.publish_gimbal_attitude(flags=0,q=gimbal_q)
-
+        # TODO: Test gimbal quaternions. If doesn't work, use euler angles / udpate firmware
+        # self.publish_gimbal_attitude(flags=12,q=[-0.7,0.,0.7,0.0])
+        pass
+       
     def on_global_position_update(self, msg):
         """Override to handle global position updates"""
         # Could add GPS monitoring here

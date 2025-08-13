@@ -208,14 +208,6 @@ class PX4BaseController(Node, ABC):
         # Publish offboard control mode (can be overridden via setting offboard_control_mode_params)
         self.publish_offboard_control_mode(**self.offboard_control_mode_params)
 
-        # check if blocking setpoint publish or not
-
-        # NOTE: Why the hell is auto loiter, takeoff, and mission in here? Huh?
-        self.blocking_setpoint_publish = not (  self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_MISSION or
-                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD or
-                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_TAKEOFF or
-                                                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER )
-
     def _main_timer_callback(self):
         """Main timer callback - calls the abstract main_loop method"""
         try:
@@ -347,7 +339,10 @@ class PX4BaseController(Node, ABC):
 
     def publish_setpoint(self, **kwargs):
         """Publish trajectory setpoint (relative to home position)"""
-        if self.blocking_setpoint_publish:
+        if not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().warn(
+                "Blocking offboard commands while not in offboard mode."
+            )
             return
         
         msg = TrajectorySetpoint()
@@ -366,7 +361,7 @@ class PX4BaseController(Node, ABC):
         msg.origin_sysid = kwargs.get("origin_sysid", 0)
         msg.origin_compid = kwargs.get("origin_compid", 0)
         msg.target_system = kwargs.get("target_system", 0)
-        msg.target_component = kwargs.get("target_component", 0)
+        msg.target_component = kwargs.get("target_component", 0) # NOTE: FOR SIYI USE 154 INSTEAD
         
         # Only set roll and pitch lock
         msg.flags = kwargs.get("flags",12 )
@@ -375,17 +370,15 @@ class PX4BaseController(Node, ABC):
         
         msg.q = list(kwargs.get("q", np.nan * np.zeros(4)))
 
-        msg.angular_velocity_x = kwargs.get("angular_velocity_x", float(1))
-        msg.angular_velocity_y = kwargs.get("angular_velocity_y", float(1))
-        msg.angular_velocity_z = kwargs.get("angular_velocity_z", float(1))
+        msg.angular_velocity_x = kwargs.get("angular_velocity_x", float("nan"))
+        msg.angular_velocity_y = kwargs.get("angular_velocity_y", float("nan"))
+        msg.angular_velocity_z = kwargs.get("angular_velocity_z", float("nan"))
 
         
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
 
         self.gimbal_manager_set_attitude_publisher.publish(msg)
         
-
-    
     # TODO: Add helper function for MAV_CMD_DO_SET_ACTUATOR
     # or at least document usage (https://mavlink.io/en/messages/common.html#MAV_CMD_DO_SET_ACTUATOR)
 
