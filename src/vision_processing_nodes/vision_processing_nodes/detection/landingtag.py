@@ -33,12 +33,12 @@ class LandingTagDetector:
         
         # Gray scale conversion
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blurred    = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
-        clahe      = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
-        enhanced   = clahe.apply(blurred)
+        #blurred    = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
+        #clahe      = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
+        #enhanced   = clahe.apply(blurred)                                              #commented out so that we only use grayscale images without clahe processing
 
         # 태그 검출
-        corners, ids, rejected = detector.detectMarkers(enhanced)
+        corners, ids, rejected = detector.detectMarkers(gray)
         if ids is None or len(ids) == 0:
             return None, None
         
