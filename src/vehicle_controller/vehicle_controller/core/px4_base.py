@@ -356,7 +356,6 @@ class PX4BaseController(Node, ABC):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
 
-    # TODO: Double check
     def publish_gimbal_attitude(self, **kwargs):
         msg = GimbalManagerSetAttitude()
         

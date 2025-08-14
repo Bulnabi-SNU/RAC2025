@@ -3,6 +3,8 @@ __contact__ = ""
 
 import time
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
+
 import numpy as np
 from enum import Enum
 from typing import Optional
@@ -125,23 +127,15 @@ class MissionController(PX4BaseController):
         self.logger = Logger(log_path="./flight_logs/")
         self.log_timer = None
         
+        self.add_on_set_parameters_callback(self.param_update_callback)
+        
         # Initialize DroneTargetController with parameters from ROS
         self.drone_target_controller = DroneTargetController(
             target_offset=self.tracking_target_offset,
             target_altitude=self.track_min_altitude,
             acceptance_radius=self.tracking_acceptance_radius_xy,
             dt=self.timer_period,
-            xy_v_max_default=self.drone_controller_params['xy_v_max_default'],
-            xy_a_max_default=self.drone_controller_params['xy_a_max_default'],
-            xy_v_max_close=self.drone_controller_params['xy_v_max_close'],
-            xy_a_max_close=self.drone_controller_params['xy_a_max_close'],
-            z_v_max_default=self.drone_controller_params['z_v_max_default'],
-            z_a_max_default=self.drone_controller_params['z_a_max_default'],
-            close_distance_threshold=self.drone_controller_params['close_distance_threshold'],
-            far_distance_threshold=self.drone_controller_params['far_distance_threshold'],
-            descend_radius=self.drone_controller_params['descend_radius'],
-            z_velocity_exp_coefficient=self.drone_controller_params['z_velocity_exp_coefficient'],
-            z_velocity_exp_offset=self.drone_controller_params['z_velocity_exp_offset'],
+            **self.drone_controller_params
         )
 
     def _setup_subscribers(self):
@@ -180,6 +174,68 @@ class MissionController(PX4BaseController):
             handler()
         
         self._publish_vehicle_state()
+
+    def param_update_callback(self, params):
+        """Parameter callback for dynamically updating parameters while flying"""
+        successful = True
+        reason = ''
+        
+        for p in params:
+            # Mission parameters
+            if p.name == 'mission_altitude':
+                self.mission_altitude = p.value
+            elif p.name == 'track_min_altitude':
+                self.track_min_altitude = p.value
+            elif p.name == 'gripper_altitude':
+                self.gripper_altitude = p.value
+            elif p.name == 'tracking_target_offset':
+                self.tracking_target_offset = p.value
+                # Update drone target controller
+                self.drone_target_controller.target_offset = p.value
+            elif p.name == 'tracking_acceptance_radius_xy':
+                self.tracking_acceptance_radius_xy = p.value
+                self.drone_target_controller.acceptance_radius = p.value
+            elif p.name == 'tracking_acceptance_radius_z':
+                self.tracking_acceptance_radius_z = p.value
+            elif p.name == 'casualty_waypoint' :
+                self.casualty_waypoint = p.value
+            elif p.name == 'drop_tag_waypoint':
+                self.drop_tag_waypoint = p.value
+            elif p.name == 'landing_tag_waypoint':
+                self.landing_tag_waypoint = p.value
+                
+            # DroneTargetController parameters
+            elif p.name.startswith('drone_target_controller.'):
+                param_key = p.name.replace('drone_target_controller.', '')
+                self.drone_controller_params[param_key] = p.value
+                # Update the controller directly
+                if hasattr(self.drone_target_controller, param_key):
+                    setattr(self.drone_target_controller, param_key, p.value)
+            else:
+                self.get_logger().warn(f"Ignoring unknown parameter: {p.name}")
+                continue
+        
+        self.get_logger().info("[Parameter Update] Mission parameters updated successfully")
+        
+        self.drone_target_controller.reset()  # Reset controller to apply new parameters
+        self.print_current_parameters()
+        return SetParametersResult(successful=successful, reason=reason)
+
+    def print_current_parameters(self):
+        """Print current parameter values for debugging"""
+        self.get_logger().info("Current Mission Parameters:")
+        self.get_logger().info(f"  mission_altitude: {self.mission_altitude}")
+        self.get_logger().info(f"  track_min_altitude: {self.track_min_altitude}")
+        self.get_logger().info(f"  gripper_altitude: {self.gripper_altitude}")
+        self.get_logger().info(f"  tracking_target_offset: {self.tracking_target_offset}")
+        self.get_logger().info(f"  tracking_acceptance_radius_xy: {self.tracking_acceptance_radius_xy}")
+        self.get_logger().info(f"  tracking_acceptance_radius_z: {self.tracking_acceptance_radius_z}")
+        self.get_logger().info(f"  casualty_waypoint: {self.casualty_waypoint}")
+        self.get_logger().info(f"  drop_tag_waypoint: {self.drop_tag_waypoint}")
+        self.get_logger().info(f"  landing_tag_waypoint: {self.landing_tag_waypoint}")
+        self.get_logger().info("DroneTargetController Parameters:")
+        for key, value in self.drone_controller_params.items():
+            self.get_logger().info(f"  {key}: {value}")
 
     def _publish_vehicle_state(self):
         """Publish current vehicle state"""
