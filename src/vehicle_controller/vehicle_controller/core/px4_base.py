@@ -96,6 +96,8 @@ class PX4BaseController(Node, ABC):
         self.vel = np.array([0.0, 0.0, 0.0]) # NED coordinates
         self.yaw = 0.0 # Radians
         self.attitude_q = np.zeros(4)
+        
+        self.vehicle_gps = None
 
         # Home position flags
         self.get_position_flag = False 
@@ -120,14 +122,14 @@ class PX4BaseController(Node, ABC):
         """Create all ROS2 subscribers"""
         self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus,
-            "/fmu/out/vehicle_status_v1",
+            "/fmu/out/vehicle_status",
             self._vehicle_status_callback,
             self.qos_profile,
         )
 
         self.vehicle_local_position_subscriber = self.create_subscription(
             VehicleLocalPosition,
-            "/fmu/out/vehicle_local_position_v1",
+            "/fmu/out/vehicle_local_position",
             self._vehicle_local_position_callback,
             self.qos_profile,
         )

@@ -31,7 +31,6 @@ class MissionState(Enum):
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
     MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG"
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
-    FINAL_DESCEND = "FINAL_DESCEND"
     LAND = "LAND"
     MISSION_COMPLETE = "MISSION_COMPLETE"
     ERROR = "ERROR"
@@ -50,8 +49,7 @@ class MissionController(PX4BaseController):
         MissionState.DROP_TAG_DESCEND: 2,
         MissionState.GRIPPER_OPEN: 2,
         MissionState.DROP_TAG_ASCEND: 2,
-        MissionState.LANDING_TAG_TRACK: 3,
-        MissionState.FINAL_DESCEND: 3,
+        MissionState.LANDING_TAG_TRACK: 3
     }
 
     def __init__(self):
@@ -72,7 +70,9 @@ class MissionController(PX4BaseController):
 
     def _load_parameters(self):
         """Load ROS parameters"""
+        # Mission parameters
         params = [
+            ('timer_period', 0.01),  
             ('casualty_waypoint', 14),
             ('drop_tag_waypoint', 15),
             ('landing_tag_waypoint', 16),
@@ -85,24 +85,63 @@ class MissionController(PX4BaseController):
             ('do_logging', True),
         ]
         
-        self.declare_parameters(namespace='', parameters=params)
+        # DroneTargetController parameters
+        drone_controller_params = [
+            ('drone_target_controller.xy_v_max_default', 3.0),
+            ('drone_target_controller.xy_a_max_default', 1.0),
+            ('drone_target_controller.xy_v_max_close', 0.5),
+            ('drone_target_controller.xy_a_max_close', 0.1),
+            ('drone_target_controller.z_v_max_default', 10.0),
+            ('drone_target_controller.z_a_max_default', 4.0),
+            ('drone_target_controller.close_distance_threshold', 0.5),
+            ('drone_target_controller.far_distance_threshold', 2.0),
+            ('drone_target_controller.descend_radius', 0.5),
+            ('drone_target_controller.z_velocity_exp_coefficient', 3.0),
+            ('drone_target_controller.z_velocity_exp_offset', 0.5),
+        ]
         
-        # Cache parameter values
+        # Declare all parameters
+        self.declare_parameters(namespace='', parameters=params + drone_controller_params)
+        
+        # Cache mission parameter values
         for param_name, _ in params:
             setattr(self, param_name, self.get_parameter(param_name).value)
+        
+        # Store drone controller parameters in a dict
+        self.drone_controller_params = {}
+        for param_name, _ in drone_controller_params:
+            # Extract the actual parameter name (remove 'drone_target_controller.' prefix)
+            actual_name = param_name.replace('drone_target_controller.', '')
+            self.drone_controller_params[actual_name] = self.get_parameter(param_name).value
 
     def _initialize_components(self):
         """Initialize controllers and logger"""
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
         
+        self.offboard_heartbeat.setPeriod(self.timer_period)
+        self.main_timer.setPeriod(self.timer_period)
+        
         self.logger = Logger(log_path="./flight_logs/")
         self.log_timer = None
         
+        # Initialize DroneTargetController with parameters from ROS
         self.drone_target_controller = DroneTargetController(
             target_offset=self.tracking_target_offset,
             target_altitude=self.track_min_altitude,
-            acceptance_radius=self.tracking_acceptance_radius_xy
+            acceptance_radius=self.tracking_acceptance_radius_xy,
+            dt=self.timer_period,
+            xy_v_max_default=self.drone_controller_params['xy_v_max_default'],
+            xy_a_max_default=self.drone_controller_params['xy_a_max_default'],
+            xy_v_max_close=self.drone_controller_params['xy_v_max_close'],
+            xy_a_max_close=self.drone_controller_params['xy_a_max_close'],
+            z_v_max_default=self.drone_controller_params['z_v_max_default'],
+            z_a_max_default=self.drone_controller_params['z_a_max_default'],
+            close_distance_threshold=self.drone_controller_params['close_distance_threshold'],
+            far_distance_threshold=self.drone_controller_params['far_distance_threshold'],
+            descend_radius=self.drone_controller_params['descend_radius'],
+            z_velocity_exp_coefficient=self.drone_controller_params['z_velocity_exp_coefficient'],
+            z_velocity_exp_offset=self.drone_controller_params['z_velocity_exp_offset'],
         )
 
     def _setup_subscribers(self):
