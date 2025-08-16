@@ -90,8 +90,8 @@ class VisionProcessorNode(Node):
                 ('detection.landing_tag.distortion_coeffs', [-0.090292, 0.052332, 0.000171, 0.006618, 0.0]),
                 
                 # Camera FOV
-                ('camera_fov.horizontal', 114.0),
-                ('camera_fov.vertical', 159.0),
+                ('camera_fov.horizontal', 89.0),
+                ('camera_fov.vertical', 60.0),
             ]
         )
         
@@ -100,6 +100,116 @@ class VisionProcessorNode(Node):
         self.use_jetson = self.get_parameter('use_jetson').value
         self.show_debug_stream = self.get_parameter('show_debug_stream').value
         
+        self.h_fov = self.get_parameter('camera_fov.horizontal').value
+        self.v_fov = self.get_parameter('camera_fov.vertical').value  
+    
+    def _param_update_callback(self, params):
+        """Dynamic parameter update callback"""
+        successful = True
+        reason = ''
+        
+        for param in params:
+            try:
+                
+                # Camera parameters
+                if param.name == 'camera.device':
+                    # Note: Camera device changes require restart
+                    self.get_logger().warn("Camera device parameter changed - restart required for effect")
+                    
+                elif param.name == 'camera.rtsp_url':
+                    # Note: RTSP URL changes require restart
+                    self.get_logger().warn("RTSP URL parameter changed - restart required for effect")
+                    
+                # Streaming parameters
+                elif param.name in ['streaming.target_ip', 'streaming.port', 'streaming.width', 
+                                'streaming.height', 'streaming.fps']:
+                    # Note: Streaming parameters require restart
+                    self.get_logger().warn(f"Streaming parameter {param.name} changed - restart required for effect")
+                    
+                # Casualty detection parameters
+                elif param.name == 'detection.casualty.lower_red1':
+                    self.casualty_detector.update_param(lower_red1=np.array(param.value))
+                    self.get_logger().info(f"Updated casualty lower_red1: {param.value}")
+                    
+                elif param.name == 'detection.casualty.upper_red1':
+                    self.casualty_detector.update_param(upper_red1=np.array(param.value))
+                    self.get_logger().info(f"Updated casualty upper_red1: {param.value}")
+                    
+                elif param.name == 'detection.casualty.lower_red2':
+                    self.casualty_detector.update_param(lower_red2=np.array(param.value))
+                    self.get_logger().info(f"Updated casualty lower_red2: {param.value}")
+                    
+                elif param.name == 'detection.casualty.upper_red2':
+                    self.casualty_detector.update_param(upper_red2=np.array(param.value))
+                    self.get_logger().info(f"Updated casualty upper_red2: {param.value}")
+                    
+                elif param.name == 'detection.casualty.min_area':
+                    self.casualty_detector.update_param(min_area=param.value)
+                    self.get_logger().info(f"Updated casualty min_area: {param.value}")
+                    
+                # Drop tag detection parameters
+                elif param.name == 'detection.drop_tag.lower_red1':
+                    self.drop_tag_detector.update_param(lower_red1=np.array(param.value))
+                    self.get_logger().info(f"Updated drop_tag lower_red1: {param.value}")
+                    
+                elif param.name == 'detection.drop_tag.upper_red1':
+                    self.drop_tag_detector.update_param(upper_red1=np.array(param.value))
+                    self.get_logger().info(f"Updated drop_tag upper_red1: {param.value}")
+                    
+                elif param.name == 'detection.drop_tag.lower_red2':
+                    self.drop_tag_detector.update_param(lower_red2=np.array(param.value))
+                    self.get_logger().info(f"Updated drop_tag lower_red2: {param.value}")
+                    
+                elif param.name == 'detection.drop_tag.upper_red2':
+                    self.drop_tag_detector.update_param(upper_red2=np.array(param.value))
+                    self.get_logger().info(f"Updated drop_tag upper_red2: {param.value}")
+                    
+                elif param.name == 'detection.drop_tag.min_area':
+                    self.drop_tag_detector.update_param(min_area=param.value)
+                    self.get_logger().info(f"Updated drop_tag min_area: {param.value}")
+                    
+                elif param.name == 'detection.drop_tag.pause_threshold':
+                    self.drop_tag_detector.update_param(pause_threshold=param.value)
+                    self.get_logger().info(f"Updated drop_tag pause_threshold: {param.value}")
+                    
+                # Landing tag detection parameters
+                elif param.name == 'detection.landing_tag.tag_size':
+                    self.landing_tag_detector.update_param(tag_size=param.value)
+                    self.get_logger().info(f"Updated landing_tag tag_size: {param.value}")
+                    
+                elif param.name == 'detection.landing_tag.camera_matrix':
+                    K = np.reshape(np.array(param.value, dtype=np.float64), (3, 3))
+                    self.landing_tag_detector.update_param(K=K)
+                    self.get_logger().info(f"Updated landing_tag camera_matrix")
+                    
+                elif param.name == 'detection.landing_tag.distortion_coeffs':
+                    D = np.array(param.value, dtype=np.float64)
+                    self.landing_tag_detector.update_param(D=D)
+                    self.get_logger().info(f"Updated landing_tag distortion_coeffs")
+                    
+                # Camera FOV parameters
+                elif param.name  == 'camera_fov.horizontal':
+                    self.h_fov = param.value
+                    self.get_logger().info(f"Updated camera_fov.horizontal: {param.value}")
+                elif param.name == 'camera_fov.vertical':
+                    self.v_fov = param.value
+                    self.get_logger().info(f"Updated camera_fov.vertical: {param.value}")
+                    
+                else:
+                    self.get_logger().warn(f"Ignoring parameter: {param.name}")
+                    continue
+                    
+            except Exception as e:
+                self.get_logger().error(f"Failed to update parameter {param.name}: {e}")
+                successful = False
+                reason = f"Failed to update {param.name}: {str(e)}"
+                break
+        
+        if successful:
+            self.get_logger().info("[Parameter Update] Vision processing parameters updated successfully")
+            
+        return SetParametersResult(successful=successful, reason=reason)
+
     def _setup_qos(self):
         """Setup QoS profiles"""
         self.qos_profile = QoSProfile(
@@ -389,8 +499,8 @@ class VisionProcessorNode(Node):
     def _publish_target_location(self, frame):
         """Publish target location message"""
         h, w = frame.shape[:2]
-        h_fov = self.get_parameter('camera_fov.horizontal').value
-        v_fov = self.get_parameter('camera_fov.vertical').value
+        h_fov = self.h_fov
+        v_fov = self.v_fov
         
         target_msg = TargetLocation()
         target_msg.status = self.detection_status
@@ -433,33 +543,7 @@ class VisionProcessorNode(Node):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
         return annotated
-
-    def _param_update_callback(self, params):
-        """Dynamic parameter update callback"""
-        for param in params:
-            if param.name.startswith('casualty_'):
-                if param.name == 'casualty_lower_orange':
-                    self.casualty_detector.lower_orange = np.array(param.value, dtype=np.float32)
-                elif param.name == 'casualty_upper_orange':
-                    self.casualty_detector.upper_orange = np.array(param.value, dtype=np.float32)
-                elif param.name == 'casualty_min_area':
-                    self.casualty_detector.min_area = param.value
-                    
-            elif param.name.startswith('drop_tag_'):
-                if param.name == 'drop_tag_lower_red1':
-                    self.drop_tag_detector.lower_red1 = np.array(param.value, dtype=np.float32)
-                elif param.name == 'drop_tag_upper_red1':
-                    self.drop_tag_detector.upper_red1 = np.array(param.value, dtype=np.float32)
-                # ... other drop tag parameters
-                    
-            elif param.name.startswith('landing_tag_'):
-                if param.name == 'landing_tag_K':
-                    self.landing_tag_detector.K = np.reshape(np.array(param.value, dtype=np.float64), (3, 3))
-                elif param.name == 'landing_tag_D':
-                    self.landing_tag_detector.D = np.array(param.value, dtype=np.float64)
-        
-        return SetParametersResult(successful=True)
-
+    
     def destroy_node(self):
         """Cleanup when node is destroyed"""
         self.running = False

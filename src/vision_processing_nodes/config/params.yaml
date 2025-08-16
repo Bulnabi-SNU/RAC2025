@@ -8,7 +8,7 @@ vision_processor_node:
     # Camera/Video source
     camera:
       device: 0
-      rtsp_url: "" # Use rtsp://10.0.0.3:8554/h.264 
+      rtsp_url: "" # Use rtsp://10.0.0.3:8554/h.264 for SIYI (even for h.265)
     
     # Streaming configuration
     streaming:
