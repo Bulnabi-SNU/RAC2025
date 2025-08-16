@@ -21,7 +21,7 @@ def generate_launch_description():
     
     show_debug_stream_arg = DeclareLaunchArgument(
         'show_debug_stream',
-        default_value='alse',
+        default_value='False',
         description='Whether to show debug stream via imshow (true/false)'
     )
     
@@ -33,7 +33,7 @@ def generate_launch_description():
     # Main vision processing node - handles everything in one process for efficiency
     vision_node = Node(
         package='vision_processing_nodes',
-        executable='vision_processor_node',
+        executable='image_processing_node',
         parameters=[
             PathJoinSubstitution([
                 FindPackageShare('vision_processing_nodes'), 'config', 'params.yaml'

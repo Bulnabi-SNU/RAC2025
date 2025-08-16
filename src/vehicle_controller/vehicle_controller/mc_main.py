@@ -74,7 +74,6 @@ class MissionController(PX4BaseController):
         """Load ROS parameters"""
         # Mission parameters
         params = [
-            ('timer_period', 0.01),  
             ('casualty_waypoint', 14),
             ('drop_tag_waypoint', 15),
             ('landing_tag_waypoint', 16),
@@ -120,9 +119,6 @@ class MissionController(PX4BaseController):
         """Initialize controllers and logger"""
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
-        
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
         
         self.logger = Logger(log_path="./flight_logs/")
         self.log_timer = None
@@ -272,6 +268,7 @@ class MissionController(PX4BaseController):
             return
 
         if self.is_disarmed():
+            self.get_logger().info("Arming vehicle in offboard mode")
             self.arm()
         else:
             self.get_logger().info("Armed in offboard mode, starting logger")

@@ -89,9 +89,6 @@ class MissionController(PX4BaseController):
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
         
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
-        
         # Initialize DroneTargetController with parameters from ROS
         self.drone_target_controller = DroneTargetController(
             target_offset=self.tracking_target_offset,
@@ -237,7 +234,7 @@ class MissionController(PX4BaseController):
                 if hasattr(self.drone_target_controller, param_key):
                     setattr(self.drone_target_controller, param_key, p.value)
             else:
-                self.get_logger().warn(f"Ignoring unknown parameter: {p.name}")
+                self.get_logger().warn(f"Ignoring parameter: {p.name}")
                 continue
         
         self.get_logger().info("[Parameter Update] Test 04 parameters updated successfully")

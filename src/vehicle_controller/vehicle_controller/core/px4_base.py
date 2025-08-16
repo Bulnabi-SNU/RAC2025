@@ -46,16 +46,14 @@ class PX4BaseController(Node, ABC):
     def __init__(self, node_name: str, timer_period: float = 0.01):
         super().__init__(node_name)
 
-        self.timer_period = timer_period
+        self.declare_parameter('timer_period', timer_period)
+        self.timer_period = self.get_parameter('timer_period').value
 
         # Configure QoS profile
         self._setup_qos()
-
         self._init_state_variables()
-
         self._create_subscribers()
         self._create_publishers()
-
         self._setup_timers()
         
         self.get_logger().info(f"{node_name} initialized")
@@ -122,7 +120,7 @@ class PX4BaseController(Node, ABC):
         """Create all ROS2 subscribers"""
         self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus,
-            "/fmu/out/vehicle_status",
+            "/fmu/out/vehicle_status_v1",
             self._vehicle_status_callback,
             self.qos_profile,
         )

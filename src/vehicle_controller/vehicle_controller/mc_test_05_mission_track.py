@@ -90,10 +90,7 @@ class MissionController(PX4BaseController):
         # NOTE: Copy this function structure from mc_main
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
-        
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
-        
+    
         # Initialize DroneTargetController with parameters from ROS
         self.drone_target_controller = DroneTargetController(
             target_offset=self.tracking_target_offset,

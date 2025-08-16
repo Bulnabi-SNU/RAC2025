@@ -39,7 +39,6 @@ class MissionController(PX4BaseController):
     def _load_parameters(self):
         """Load ROS parameters"""
         params = [
-            ('timer_period', 0.01),
             ('hold_time_seconds', 10.0),
             ('takeoff_altitude', 5.0),
         ]
@@ -55,9 +54,6 @@ class MissionController(PX4BaseController):
         """Initialize controllers and logger"""
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
-        
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
         
         # Add parameter callback for dynamic updates
         self.add_on_set_parameters_callback(self.param_update_callback)

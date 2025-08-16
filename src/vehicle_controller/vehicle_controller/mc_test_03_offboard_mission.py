@@ -51,9 +51,6 @@ class MissionController(PX4BaseController):
         
         self.time_counter=0
         
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
-        
         # Add parameter callback for dynamic updates
         self.add_on_set_parameters_callback(self.param_update_callback)
 
@@ -139,11 +136,11 @@ class MissionController(PX4BaseController):
         reason = ''
         
         for p in params:
-            if p.name == 'mission_timeout' and p.type_ == p.Type.DOUBLE:
+            if p.name == 'mission_timeout':
                 self.mission_timeout = p.value
                 self.mission_timeout_threshold = int(self.mission_timeout / self.timer_period)
             else:
-                self.get_logger().warn(f"Ignoring unknown parameter: {p.name}")
+                self.get_logger().warn(f"Ignoring parameter: {p.name}")
                 continue
         
         self.get_logger().info("[Parameter Update] Test 03 parameters updated successfully")

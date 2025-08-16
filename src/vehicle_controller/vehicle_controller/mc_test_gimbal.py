@@ -23,39 +23,15 @@ class MissionController(PX4BaseController):
     def __init__(self):
         super().__init__('mc_test_gimbal')
         
-        self._load_parameters()
-        self._initialize_components()
-        
         self.get_logger().info("Test 05: Gimbal Control initialized")
-
-    def _load_parameters(self):
-        """Load ROS parameters"""
-        params = [
-            ('timer_period', 0.01),
-        ]
-        
-        self.declare_parameters(namespace='', parameters=params)
-        
-        for param_name, _ in params:
-            setattr(self, param_name, self.get_parameter(param_name).value)
-
-
-    def _initialize_components(self):
-        """Initialize controllers and logger"""
-        self.offboard_control_mode_params["position"] = True
-        self.offboard_control_mode_params["velocity"] = False
-        
-        self.offboard_heartbeat.setPeriod(self.timer_period)
-        self.main_timer.setPeriod(self.timer_period)
-        
-        # Add parameter callback for dynamic updates
-        self.add_on_set_parameters_callback(self.param_update_callback)
 
     def main_loop(self):
         
         # NOTE: Siyi may not like quaternions and flags (yaw follow etc.)
         # https://mavlink.io/en/messages/common.html#GIMBAL_MANAGER_FLAGS
         # If so, change to GimbalManagerSetManualControl instead.
+        
+        # NOTE v2: Updated firmware made everything work well. So target component 0, flag 12, and q 0.7 0 -0.7 0 works super nice.
         self.publish_gimbal_attitude(target_component=154, 
                                      flags = 4+8+32, 
                                      # 4: roll lock, 8: pitch lock, 32: GIMBAL_DEVICE_FLAGS_YAW_IN_VEHICLE_FRAME
