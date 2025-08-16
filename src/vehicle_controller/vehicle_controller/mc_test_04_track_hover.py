@@ -125,7 +125,7 @@ class MissionController(PX4BaseController):
         
         # NOTE: target_component should be set to 0 for gazebo
         self.publish_gimbal_attitude(target_component=154, flags = 12,
-                                     q = [0.0, 0.0, 1.0, 0.0])
+                                     q = [0.7, 0.0, -0.7, 0.0])
 
     def _publish_vehicle_state(self):
         """Publish current vehicle state"""
