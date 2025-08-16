@@ -1,6 +1,6 @@
 """
-Test 04: Offboard -> Track Target -> Land/Hover
-Tests target tracking functionality with vision system
+Test 05: Takeoff -> Mission -> Track at Waypoint -> Land
+Tests the takeoff, mission execution with target tracking at specific waypoint, then landing
 """
 
 __author__ = "PresidentPlant"
@@ -20,17 +20,19 @@ from rcl_interfaces.msg import SetParametersResult
 class TestState(Enum):
     INIT = "INIT"
     OFFBOARD_ARM = "OFFBOARD_ARM"
-    TAKEOFF = "TAKEOFF"
-    TRACK = "TRACK"
-    DESCEND = "DESCEND"
-    LAND_OR_HOVER = "LAND_OR_HOVER"
+    OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION"
+    MISSION_EXECUTE = "MISSION_EXECUTE"
+    MISSION_TO_OFFBOARD_TRACK = "MISSION_TO_OFFBOARD_TRACK"
+    TRACK_TARGET = "TRACK_TARGET"
+    LAND = "LAND"
     COMPLETE = "COMPLETE"
 
 
 class MissionController(PX4BaseController):
+    """Test 05: Takeoff -> Mission -> Track -> Land"""
 
     def __init__(self):
-        super().__init__("mc_test_04")
+        super().__init__("mc_test_05")
 
         self._load_parameters()
         self._initialize_components()
@@ -38,22 +40,22 @@ class MissionController(PX4BaseController):
         
         self.state = TestState.INIT
         self.target: Optional[TargetLocation] = None
+        self.tracking_complete = False
         
-        self.get_logger().info("Test 04: Track and Hover initialized")
+        self.get_logger().info("Test 05: Mission with Tracking initialized")
 
     def _load_parameters(self):
         """Load ROS parameters"""
-        # NOTE: Copy this function structure from mc_main but adapt parameter names
+        # NOTE: Copy this function structure from mc_main
         params = [
             ('timer_period', 0.01),
-            ('mission_altitude', 10.0),
+            ('track_waypoint', 3),  # Waypoint number where tracking should start
+            ('mission_altitude', 15.0),
             ('track_min_altitude', 4.0),
-            ('gripper_altitude', 0.3),
             ('tracking_target_offset', 0.35),
-            ('tracking_acceptance_radius_xy', 0.05),
+            ('tracking_acceptance_radius_xy', 0.2),
             ('tracking_acceptance_radius_z', 0.2),
-            ('detect_target_type', 3),  # Default to landing tag
-            ('land_after_track', False),  # If false, just hover
+            ('detect_target_type', 3),  # Type of target to detect
         ]
         
         # DroneTargetController parameters - copy from mc_main
@@ -88,7 +90,7 @@ class MissionController(PX4BaseController):
         # NOTE: Copy this function structure from mc_main
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
-        
+    
         # Initialize DroneTargetController with parameters from ROS
         self.drone_target_controller = DroneTargetController(
             target_offset=self.tracking_target_offset,
@@ -111,9 +113,12 @@ class MissionController(PX4BaseController):
         """Main control loop - implements the state machine"""
         state_handlers = {
             TestState.INIT: self._handle_init,
-            TestState.TRACK: self._handle_track_target,
-            TestState.DESCEND: self._handle_descend,
-            TestState.LAND_OR_HOVER: self._handle_land_or_hover,
+            TestState.OFFBOARD_ARM: self._handle_offboard_arm,
+            TestState.OFFBOARD_TO_MISSION: self._handle_offboard_to_mission,
+            TestState.MISSION_EXECUTE: self._handle_mission_execute,
+            TestState.MISSION_TO_OFFBOARD_TRACK: self._handle_mission_to_offboard_track,
+            TestState.TRACK_TARGET: self._handle_track_target,
+            TestState.LAND: self._handle_land,
             TestState.COMPLETE: self._handle_complete,
         }
         
@@ -122,43 +127,91 @@ class MissionController(PX4BaseController):
             handler()
         
         self._publish_vehicle_state()
-        
-        # NOTE: target_component should be set to 0 for gazebo
-        self.publish_gimbal_attitude(target_component=154, flags = 12,
-                                     q = [0.0, 0.0, 1.0, 0.0])
 
     def _publish_vehicle_state(self):
         """Publish current vehicle state"""
+        target_type = self.detect_target_type if self.state == TestState.TRACK_TARGET else 0
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=self.detect_target_type if self.state == TestState.TRACK else 0
+                detect_target_type=target_type
             )
         )
 
-    def on_target_update(self, msg):
+    def on_target_update(self, msg: TargetLocation):
         """Callback for target coordinates from image_processing_node"""
         self.target = msg if msg is not None else None
 
     # =======================================
-    # State Machine Functions
+    # State Machine Handlers
     # =======================================
 
     def _handle_init(self):
         """Initialize system and check status"""
         if not self.get_position_flag:
-            self.get_logger().info("Waiting for position data...")
+            self.get_logger().info("Waiting for global position data...")
             return
 
         self.set_home_position()
         
         if self.home_set_flag:
             self.get_logger().info("Home position set, ready for offboard mode")
-            self.state = TestState.TRACK
+            self.state = TestState.OFFBOARD_ARM
 
-  
+    def _handle_offboard_arm(self):
+        """Wait for offboard mode, then arm"""
+        if not self.is_offboard_mode():
+            return
+
+        if self.is_disarmed():
+            self.arm()
+        else:
+            self.get_logger().info("Armed in offboard mode, switching to mission")
+            self.state = TestState.OFFBOARD_TO_MISSION
+
+    def _handle_offboard_to_mission(self):
+        """Switch from offboard to mission mode"""
+        if self.is_offboard_mode():
+            self.set_mission_mode()
+        elif self.is_mission_mode():
+            self.get_logger().info("Mission mode active, executing mission")
+            self.state = TestState.MISSION_EXECUTE
+
+    def _handle_mission_execute(self):
+        """Execute mission and check for tracking waypoint"""
+        if not self.is_mission_mode():
+            self.get_logger().warn("Not in mission mode, mission may have completed or failed")
+            self.state = TestState.LAND
+            return
+
+        current_wp = self.mission_wp_num
+
+        # Check if reached tracking waypoint
+        if current_wp == self.track_waypoint and not self.tracking_complete:
+            self.get_logger().info(f"Reached tracking waypoint {self.track_waypoint}, switching to offboard for tracking")
+            self.state = TestState.MISSION_TO_OFFBOARD_TRACK
+            return
+
+        # Log mission progress every 5 seconds
+        if hasattr(self, '_mission_log_counter'):
+            self._mission_log_counter += 1
+        else:
+            self._mission_log_counter = 0
+        
+        if self._mission_log_counter % int(5.0 / self.timer_period) == 0:
+            if current_wp is not None:
+                self.get_logger().info(f"Mission executing... Current WP: {current_wp}")
+
+    def _handle_mission_to_offboard_track(self):
+        """Switch from mission to offboard for tracking"""
+        if self.is_mission_mode():
+            self.set_offboard_mode()
+        elif self.is_offboard_mode():
+            self.get_logger().info("Switched to offboard mode, starting target tracking")
+            self.state = TestState.TRACK_TARGET
+
     def _handle_track_target(self):
-        """Track target using vision and transition to next state when arrived"""
+        """Track target using vision until arrived"""
         if self.target is None or self.target.status != 0:
             self.get_logger().warn("No target coordinates available")
             return
@@ -169,32 +222,19 @@ class MissionController(PX4BaseController):
 
         self.publish_setpoint(pos_sp=target_pos)
 
+        # Check if tracking is complete (arrived at target)
         if arrived:
             self.drone_target_controller.reset()
-            self.get_logger().info("Target tracking complete")
-            self.state = TestState.DESCEND
+            self.tracking_complete = True
+            self.get_logger().info("Target tracking complete - arrived at target position")
+            self.state = TestState.LAND
 
-    def _handle_descend(self):
-        """Descend to target position"""
-        target_pos = np.array([self.pos[0], self.pos[1], -self.gripper_altitude])
-        self.publish_setpoint(pos_sp=target_pos)
-
-        if abs(self.pos[2] - (-self.gripper_altitude)) < self.tracking_acceptance_radius_z:
-            self.get_logger().info("Reached descent altitude")
-            self.state = TestState.LAND_OR_HOVER
-
-    def _handle_land_or_hover(self):
-        """Either land or hover based on parameter"""
-        if self.land_after_track:
-            self.land()
-            self.get_logger().info("Landing command sent")
-            self.state = TestState.COMPLETE
-        else:
-            # Just hover at current position
-            self.publish_setpoint(pos_sp=self.pos)
-            self.get_logger().info("Hovering at target position - Test 04 Complete!")
-            self.state = TestState.COMPLETE
-            # Could add a timer here to hover for a specific duration
+    def _handle_land(self):
+        """Final landing sequence"""
+        self.land()
+        self.get_logger().info("Landing command sent")
+        self.get_logger().info("Test 05 Complete!")
+        self.state = TestState.COMPLETE
 
     def _handle_complete(self):
         """Test complete"""
@@ -202,18 +242,18 @@ class MissionController(PX4BaseController):
 
     def param_update_callback(self, params):
         """Parameter callback for dynamically updating parameters while flying"""
-        # NOTE: Copy this function from mc_main and adapt for test 04 parameters
+        # NOTE: Copy this function from mc_main and adapt for test 05 parameters
         successful = True
         reason = ''
         
         for p in params:
             # Mission parameters
-            if p.name == 'mission_altitude':
+            if p.name == 'track_waypoint':
+                self.track_waypoint = p.value
+            elif p.name == 'mission_altitude':
                 self.mission_altitude = p.value
             elif p.name == 'track_min_altitude':
                 self.track_min_altitude = p.value
-            elif p.name == 'gripper_altitude':
-                self.gripper_altitude = p.value
             elif p.name == 'tracking_target_offset':
                 self.tracking_target_offset = p.value
                 self.drone_target_controller.target_offset = p.value
@@ -224,20 +264,17 @@ class MissionController(PX4BaseController):
                 self.tracking_acceptance_radius_z = p.value
             elif p.name == 'detect_target_type':
                 self.detect_target_type = p.value
-            elif p.name == 'land_after_track':
-                self.land_after_track = p.value
             # DroneTargetController parameters
             elif p.name.startswith('drone_target_controller.'):
                 param_key = p.name.replace('drone_target_controller.', '')
-            
                 self.drone_controller_params[param_key] = p.value
                 if hasattr(self.drone_target_controller, param_key):
                     setattr(self.drone_target_controller, param_key, p.value)
             else:
-                self.get_logger().warn(f"Ignoring parameter: {p.name}")
+                self.get_logger().warn(f"Ignoring unknown parameter: {p.name}")
                 continue
         
-        self.get_logger().info("[Parameter Update] Test 04 parameters updated successfully")
+        self.get_logger().info("[Parameter Update] Test 05 parameters updated successfully")
         return SetParametersResult(successful=successful, reason=reason)
 
     # Override methods (placeholders)
@@ -256,9 +293,9 @@ def main(args=None):
         controller = MissionController()
         rclpy.spin(controller)
     except KeyboardInterrupt:
-        print("Test 04 interrupted by user")
+        print("Test 05 interrupted by user")
     except Exception as e:
-        print(f"Test 04 failed with error: {e}")
+        print(f"Test 05 failed with error: {e}")
     finally:
         if controller:
             controller.destroy_node()
