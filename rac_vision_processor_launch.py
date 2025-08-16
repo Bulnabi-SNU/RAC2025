@@ -1,56 +1,56 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
-    # Declare launch argument for gazebo/real mode
+    # Declare launch arguments
     use_gazebo_arg = DeclareLaunchArgument(
         'use_gazebo',
-        default_value='true',
+        default_value='False',
         description='Whether to use Gazebo simulation (true) or real hardware (false)'
     )
-        # Declare launch argument for streaming
-    do_streaming_arg = DeclareLaunchArgument(
-        'do_streaming',
-        default_value='false',
-        description='Whether to enable streaming functionality'
+    
+    use_jetson_arg = DeclareLaunchArgument(
+        'use_jetson',
+        default_value='False',
+        description='Whether running on Jetson platform (true) or other hardware (false)'
     )
     
-    # Get the launch configuration
+    show_debug_stream_arg = DeclareLaunchArgument(
+        'show_debug_stream',
+        default_value='alse',
+        description='Whether to show debug stream via imshow (true/false)'
+    )
+    
+    # Get launch configurations
     use_gazebo = LaunchConfiguration('use_gazebo')
-    do_streaming = LaunchConfiguration('do_streaming')
+    use_jetson = LaunchConfiguration('use_jetson')
+    show_debug_stream = LaunchConfiguration('show_debug_stream')
     
-    # Image processing node with conditional executable name
-    image_processing_node = Node(
+    # Main vision processing node - handles everything in one process for efficiency
+    vision_node = Node(
         package='vision_processing_nodes',
-        executable=PythonExpression([
-            "'image_processing_node_gazebo' if '", use_gazebo, "' == 'true' else 'image_processing_node'"
-        ]),
-        parameters=[PathJoinSubstitution([
-            FindPackageShare('vision_processing_nodes'), 'config', 'params.yaml'
-        ]),
-                    {'do_streaming': do_streaming}
-                    ],
-        output='screen'
-    )
-    
-    # Image processing node with conditional executable name
-    camera_publisher_node = Node(
-        package='vision_processing_nodes',
-        executable='camera_publisher_node',
+        executable='vision_processor_node',
+        parameters=[
+            PathJoinSubstitution([
+                FindPackageShare('vision_processing_nodes'), 'config', 'params.yaml'
+            ]),
+            {'use_gazebo': use_gazebo},
+            {'use_jetson': use_jetson},
+            {'show_debug_stream': show_debug_stream}
+        ],
         output='screen',
-        condition=UnlessCondition(use_gazebo)
+        emulate_tty=True
     )
-
+    
     # ROS-Gazebo bridge node (only runs when use_gazebo is true)
     gz_bridge_node = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name="gz_image_bridge",
-        #arguments=['/world/RAC_2025/model/standard_vtol_0/link/camera_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
         arguments=['/world/RAC_2025/model/standard_vtol_gimbal_0/link/camera_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
         output='screen',
         condition=IfCondition(use_gazebo)
@@ -58,7 +58,8 @@ def generate_launch_description():
     
     return LaunchDescription([
         use_gazebo_arg,
-        image_processing_node,
-        gz_bridge_node,
-        camera_publisher_node
+        use_jetson_arg,
+        show_debug_stream_arg,
+        vision_node,
+        gz_bridge_node
     ])

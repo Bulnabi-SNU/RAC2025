@@ -362,7 +362,7 @@ class PX4BaseController(Node, ABC):
         msg.origin_sysid = kwargs.get("origin_sysid", 0)
         msg.origin_compid = kwargs.get("origin_compid", 0)
         msg.target_system = kwargs.get("target_system", 0)
-        msg.target_component = kwargs.get("target_component", 0) # NOTE: FOR SIYI USE 154 INSTEAD
+        msg.target_component = kwargs.get("target_component", 0) # NOTE: FOR SIYI USE 154 INSTEAD # NOTE: NEVER MIND. FIXED WITH NEW FIRMWARE
         
         # Only set roll and pitch lock
         msg.flags = kwargs.get("flags",12 )
