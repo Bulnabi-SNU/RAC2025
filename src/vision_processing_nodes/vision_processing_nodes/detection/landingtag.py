@@ -11,80 +11,85 @@ __contact__ = "tkweon426@snu.ac.kr"
 
 import numpy as np
 import cv2
+import os
 
 class LandingTagDetector:
     def __init__(self, tag_size, K, D):
-
+        
+        
         self.tag_size = tag_size
         self.K = K
         self.D = D
+        
 
-    def detect_landing_tag(self, image): #to-do
+    def _create_params(self):
+        p = (cv2.aruco.DetectorParameters()
+            if hasattr(cv2.aruco, "DetectorParameters")
+            else cv2.aruco.DetectorParameters_create())
+        # 강건한 검출을 위한 파라미터
+        p.adaptiveThreshWinSizeMin     = 3
+        p.adaptiveThreshWinSizeMax     = 71
+        p.adaptiveThreshWinSizeStep    = 3
+        p.adaptiveThreshConstant       = 2
+        p.minMarkerPerimeterRate       = 0.005
+        p.maxMarkerPerimeterRate       = 5.0
+        p.minCornerDistanceRate        = 0.005
+        p.minOtsuStdDev                = 1.0
+        p.maxErroneousBitsInBorderRate = 0.7
+        p.detectInvertedMarker         = True
+        p.cornerRefinementMethod       = (cv2.aruco.CORNER_REFINE_SUBPIX
+                                        if hasattr(cv2.aruco,"CORNER_REFINE_SUBPIX") else 1)
+        p.cornerRefinementWinSize      = 3
+        return p
+
+    def detect_landing_tag(self, image):
         if image is None:
-            return None, None
-        
-        # Opencv aruco settings for apriltag detection
-        dictionary   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
-        det_params   = cv2.aruco.DetectorParameters()
-        detector     = cv2.aruco.ArucoDetector(dictionary, det_params)
+            return None
 
-        kernel_size = 9
-        clahe_clip = 2.0
-        
-        # Gray scale conversion
+        # Apriltag detection - 느리고 ellipse랑 비슷한 거리까지 측정 가능
+        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
+        detector   = cv2.aruco.ArucoDetector(dictionary, self._create_params())
+
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        #blurred    = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
-        #clahe      = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
-        #enhanced   = clahe.apply(blurred)                                              #commented out so that we only use grayscale images without clahe processing
+        corners, ids, _ = detector.detectMarkers(gray)
 
-        # 태그 검출
-        corners, ids, rejected = detector.detectMarkers(gray)
-        if ids is None or len(ids) == 0:
-            return None, None
-        
-        # 일단 그냥 첫번째 태그 사용, 나중에 위에처럼 수정
-        img_pts = corners[0].reshape(-1, 2).astype(np.float32)  # (4,2)
-        tag_center = np.mean(img_pts, axis=0)  # (2,)
+        if ids is not None and len(ids) > 0:
+            img_pts = corners[0].reshape(-1, 2).astype(np.float32)
+            tag_center = np.mean(img_pts, axis=0)
+            return np.array([tag_center[0], tag_center[1]])
 
-        # =========== This is the end of basic image detection, the latter is not 100% necessary =======
-        
-        # solvePnP용 3D 좌표계 정의 (april_tag 좌표계 만드는 코드)
-        s = self.tag_size / 2.0
-        obj_pts = np.array([[-s,  s, 0],
-                            [ s,  s, 0],
-                            [ s, -s, 0],
-                            [-s, -s, 0]], dtype=np.float32)
-        
+        # Ellipse fitting - 굉장히 빠름, 그러나 apriltag와 마찬가지로 거리 제한. 최대 거리는 apriltag와 비슷
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        edges = cv2.Canny(blur, 70, 180)
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+
+        ellipses = []
+        for c in contours:
+            if len(c) < 50:  continue
+            area = cv2.contourArea(c)
+            if area < 2000:   continue
+            peri = cv2.arcLength(c, True)
+            circ = 4*np.pi*area/(peri**2 + 1e-6)
+            if circ < 0.82:    continue
+            ellipses.append(cv2.fitEllipse(c))
+
+        if len(ellipses) > 0:
+            (cx, cy), (maj, minr), ang = ellipses[0]
+            return np.array([cx, cy])
+
+        # V-marker detection
         """
-        Solve PnP - 여기서 camera intrinsics and distortion 고려
-        success - 성공 여부에 대한 Boolean
-        rvec - rotation vector (단위)
-        tvec - transformation vector
+        To-do
+        - V-marker을 인식할 수 있는 알고리즘 만들기. 이미지가 멀어지만 타원 인식도 선이 너무 얇아져서 인식이 잘 안 된다. V-marker는 멀어도 선명하게 보인다.
+        - Canny 무언가를 쓰던가 yolo를 써보는 것도 괜찮을 것 같다.
         """
-        success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts,
-                                        self.K, self.D,
-                                        flags=cv2.SOLVEPNP_ITERATIVE)
-        if not success:
-            return np.array([tag_center[0],tag_center[1]]), None # pose estimate fail, don't return additional info
 
-        # Compute Rotation matrix and its inverse for camera position calculation
-        R, _ = cv2.Rodrigues(rvec)
-        T = tvec                        # T vector renamed for 통일
 
-        # Calculate camera position - https://darkpgmr.tistory.com/122 math behind these calculations, https://m.blog.naver.com/jewdsa813/222210464716 for code
-        tag_pose_camera_frame = (-np.linalg.inv(R)@T).flatten()
-        
-        # Calculate yaw
-        unit_z_tag_frame = np.array([0.,0.,1.])
-        unit_z_camera_frame = np.linalg.inv(R)@unit_z_tag_frame         # No need to consider transformation in this case (only consider rotation)
-        yaw = np.arctan2(unit_z_camera_frame[1],unit_z_camera_frame[0]) - np.pi/2
 
-        # Return values
-        x = tag_pose_camera_frame[0]
-        y = tag_pose_camera_frame[1]
-        z = tag_pose_camera_frame[2]
-        
-        return np.array([tag_center[0],tag_center[1]]), np.array([x,y,z,yaw])
+        # If everything fails
+        return None
+
+
 
     def update_param(self, tag_size=None, K=None, D=None):
         if tag_size is not None:
@@ -93,6 +98,7 @@ class LandingTagDetector:
             self.K = K
         if D is not None:
             self.D = D
+
     
     def print_param(self):
         print(f"LandingTagDetector Parameters:\n"
@@ -113,7 +119,7 @@ if __name__ == "__main__":
     
     detector = LandingTagDetector(tag_size=0.1, K=K, D=D)
 
-    video_path = "path/to/your/video.mp4"
+    video_path = "/home/jungwon/Downloads/landingtag.mp4"
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
@@ -126,15 +132,11 @@ if __name__ == "__main__":
             break
 
         # Clean interface: pass image, get result
-        detection, additional = detector.detect_landing_tag(frame)
+        detection = detector.detect_landing_tag(frame)
         
-        if detection != None:  # Success
+        if detection is not None:  # Success
             cx, cy = detection[0],detection[1]
-            cv2.circle(frame, (cx, cy), 10, (0, 0, 255), 2)
-            
-            if additional != None:
-                x, y, z, yaw = additional
-                print(f"Landing tag detected: x={x:.2f}, y={y:.2f}, z={z:.2f}")
+            cv2.circle(frame, (int(cx), int(cy)), 10, (0, 0, 255), 2)
 
         cv2.imshow("LandingTag Detection", frame)
         if cv2.waitKey(30) & 0xFF == ord('q'):
