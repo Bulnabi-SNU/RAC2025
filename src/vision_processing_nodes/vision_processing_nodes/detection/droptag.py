@@ -15,9 +15,9 @@ from typing import Optional, Tuple
 class DropTagDetector:
     def __init__(self,
                  # HSV 빨강 범위 (OpenCV Hue: 0~179)
-                 lower_red1: np.ndarray = np.array([0,   100, 50], dtype=np.uint8),
+                 lower_red1: np.ndarray = np.array([0,   50, 50], dtype=np.uint8),
                  upper_red1: np.ndarray = np.array([10,  255, 255], dtype=np.uint8),
-                 lower_red2: np.ndarray = np.array([170, 100, 50], dtype=np.uint8),
+                 lower_red2: np.ndarray = np.array([170, 50, 50], dtype=np.uint8),
                  upper_red2: np.ndarray = np.array([179, 255, 255], dtype=np.uint8),
 
                  # 면적/임계
