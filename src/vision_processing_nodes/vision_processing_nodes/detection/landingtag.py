@@ -65,12 +65,22 @@ class LandingTagDetector:
         """
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = cv2.aruco.detectMarkers(gray, self.dictionary, parameters=self.detector_params)
+
+        # OpenCV 4.7+ 에서는 ArucoDetector 클래스 사용
+        if hasattr(cv2.aruco, "ArucoDetector"):
+            detector = cv2.aruco.ArucoDetector(self.dictionary, self.detector_params)
+            corners, ids, _ = detector.detectMarkers(gray)
+        else:
+            # 구버전 호환
+            corners, ids, _ = cv2.aruco.detectMarkers(
+                gray, self.dictionary, parameters=self.detector_params
+            )
 
         if ids is not None and len(ids) > 0:
+            # 첫 번째 태그만 사용 (필요시 가장 큰 태그 선택 로직으로 변경 가능)
             img_pts = corners[0].reshape(-1, 2).astype(np.float32)
             tag_center = np.mean(img_pts, axis=0)
-            return np.array([tag_center[0], tag_center[1]])
+            return float(tag_center[0]), float(tag_center[1])
 
         """
         Ellipse fitting - 굉장히 빠름, 그러나 apriltag와 마찬가지로 거리 제한. 최대 거리는 apriltag와 비슷
