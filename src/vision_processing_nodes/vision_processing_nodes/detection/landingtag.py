@@ -12,8 +12,11 @@ __contact__ = "tkweon426@snu.ac.kr"
 import numpy as np
 import cv2
 import os
-import torch
-from ultralytics import YOLO
+import threading
+import queue
+import sys
+# import torch
+# from ultralytics import YOLO
 
 class LandingTagDetector:
     def __init__(self, tag_size, K, D):
@@ -22,13 +25,16 @@ class LandingTagDetector:
         self.tag_size = tag_size
         self.K = K
         self.D = D
+        
+        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
+        self.detector_params   = self._create_params()
 
         # YOLO attributes
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_file = "best_n.torchscript"
-        model_path = os.path.join(script_dir, model_file)
-        self.model = YOLO(model_path)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # script_dir = os.path.dirname(os.path.abspath(__file__))
+        # model_file = "best_n.torchscript"
+        # model_path = os.path.join(script_dir, model_file)
+        # self.model = YOLO(model_path)
+        # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
 
     def _create_params(self):
@@ -57,17 +63,14 @@ class LandingTagDetector:
         """
         Apriltag detection - 느리고 ellipse랑 비슷한 거리까지 측정 가능
         """
-        
-        # dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
-        # detector   = cv2.aruco.ArucoDetector(dictionary, self._create_params())
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # corners, ids, _ = detector.detectMarkers(gray)
+        corners, ids, _ = cv2.aruco.detectMarkers(gray, self.dictionary, parameters=self.detector_params)
 
-        # if ids is not None and len(ids) > 0:
-        #     img_pts = corners[0].reshape(-1, 2).astype(np.float32)
-        #     tag_center = np.mean(img_pts, axis=0)
-        #     return np.array([tag_center[0], tag_center[1]])
+        if ids is not None and len(ids) > 0:
+            img_pts = corners[0].reshape(-1, 2).astype(np.float32)
+            tag_center = np.mean(img_pts, axis=0)
+            return np.array([tag_center[0], tag_center[1]])
 
         """
         Ellipse fitting - 굉장히 빠름, 그러나 apriltag와 마찬가지로 거리 제한. 최대 거리는 apriltag와 비슷
@@ -93,34 +96,34 @@ class LandingTagDetector:
         """
         Yolo detection
         """
-        yolo_result = self.model(image) # 색깔 있는 cv 형식 이미지로 예측
+        # yolo_result = self.model(image) # 색깔 있는 cv 형식 이미지로 예측
                 
         
-        for result in yolo_result:
-            items = [result.names[cls.item()] for cls in result.boxes.cls.int()] # ['basket', 이런식으로 나옴]
-            bound_coordinates = result.boxes.xyxyn # [[0,0,0,0], [1,1,1,1]] 이런식으로 tensor로 나옴
-            confidence_level = result.boxes.conf # [0.8, 0.9, ...] 이런식으로 나옴
+        # for result in yolo_result:
+        #     items = [result.names[cls.item()] for cls in result.boxes.cls.int()] # ['basket', 이런식으로 나옴]
+        #     bound_coordinates = result.boxes.xyxyn # [[0,0,0,0], [1,1,1,1]] 이런식으로 tensor로 나옴
+        #     confidence_level = result.boxes.conf # [0.8, 0.9, ...] 이런식으로 나옴
 
 
-        # 태그인지 확인, confidence 제일 높은거 골라서 center coordinates 찾기.
-        if len(items) > 0:
+        # # 태그인지 확인, confidence 제일 높은거 골라서 center coordinates 찾기.
+        # if len(items) > 0:
             
-            # Choose the bounding box with highest confidence if multiple landingtags are detected
-            for i in range(len(confidence_level)):
-                max_confidence = 0
-                index = 0
-                if(confidence_level[i]>=max_confidence and items[i]=="landingtag"):
-                    max_confidence = confidence_level[i]
-                    index = i
+        #     # Choose the bounding box with highest confidence if multiple landingtags are detected
+        #     for i in range(len(confidence_level)):
+        #         max_confidence = 0
+        #         index = 0
+        #         if(confidence_level[i]>=max_confidence and items[i]=="landingtag"):
+        #             max_confidence = confidence_level[i]
+        #             index = i
         
-                # Extract center coordinates
-                x1 = bound_coordinates[index][0] * frame.shape[1]
-                y1 = bound_coordinates[index][1] * frame.shape[0]
-                x2 = bound_coordinates[index][2] * frame.shape[1]
-                y2 = bound_coordinates[index][3] * frame.shape[0]
-                cx = int((x1+x2)/2)
-                cy = int((y1+y2)/2)
-                return np.array([cx, cy])
+        #         # Extract center coordinates
+        #         x1 = bound_coordinates[index][0] * frame.shape[1]
+        #         y1 = bound_coordinates[index][1] * frame.shape[0]
+        #         x2 = bound_coordinates[index][2] * frame.shape[1]
+        #         y2 = bound_coordinates[index][3] * frame.shape[0]
+        #         cx = int((x1+x2)/2)
+        #         cy = int((y1+y2)/2)
+        #         return np.array([cx, cy])
 
 
         """
@@ -178,33 +181,38 @@ class LandingTagDetector:
         # return np.array([center[0], center[1]])
 
 
-
-
-                
-
-
-
-
         # If everything fails
         return None
 
 
 
-    def update_param(self, tag_size=None, K=None, D=None):
-        if tag_size is not None:
-            self.tag_size = tag_size
-        if K is not None:
-            self.K = K
-        if D is not None:
-            self.D = D
+    # def update_param(self, tag_size=None, K=None, D=None):
+    #     if tag_size is not None:
+    #         self.tag_size = tag_size
+    #     if K is not None:
+    #         self.K = K
+    #     if D is not None:
+    #         self.D = D
 
     
-    def print_param(self):
-        print(f"LandingTagDetector Parameters:\n"
-              f"- Tag Size: {self.tag_size}\n"
-              f"- Camera Intrinsics (K):\n{self.K}\n"
-              f"- Distortion Coefficients (D):\n{self.D}")
+    # def print_param(self):
+    #     print(f"LandingTagDetector Parameters:\n"
+    #           f"- Tag Size: {self.tag_size}\n"
+    #           f"- Camera Intrinsics (K):\n{self.K}\n"
+    #           f"- Distortion Coefficients (D):\n{self.D}")
             
+
+def worker_loop(in_q, out_q, detector):
+    """큐에서 (idx, frame)을 받아 태그 검출 후 (idx, frame, detection) 반환."""
+    while True:
+        item = in_q.get()
+        if item is None:  # 종료 신호
+            in_q.task_done()
+            break
+        idx, frame = item
+        detection = detector.detect_landing_tag(frame)
+        out_q.put((idx, frame, detection))
+        in_q.task_done()
 
 if __name__ == "__main__":
     # === Define dummy calibration (replace with your real values) ===
@@ -218,6 +226,12 @@ if __name__ == "__main__":
     
     detector = LandingTagDetector(tag_size=0.1, K=K, D=D)
 
+    try:
+        cv2.setUseOptimized(True)
+        cv2.setNumThreads(1)
+    except Exception:
+        pass
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     video_path = os.path.join(script_dir, "landingtag.mp4")
     cap = cv2.VideoCapture(video_path)
@@ -225,21 +239,81 @@ if __name__ == "__main__":
     if not cap.isOpened():
         print(f"[ERROR] Cannot open video: {video_path}")
         exit()
+        
+    # ===== 멀티스레드 파이프라인 구성 =====
+    import os as _os
+    NUM_WORKERS = max(1, (_os.cpu_count() or 4) - 1)  # CPU 하나는 OS/표시에 남겨둠
+    in_q = queue.Queue(maxsize=NUM_WORKERS * 2)
+    out_q = queue.Queue()
 
+    workers = []
+    for _ in range(NUM_WORKERS):
+        t = threading.Thread(target=worker_loop, args=(in_q, out_q, detector), daemon=True)
+        t.start()
+        workers.append(t)
+
+    next_index_to_show = 0
+    buffer = {}  # 순서 복원을 위한 임시 저장소: idx -> (frame, detection)
+    frame_index = 0
+
+    # ===== 메인 루프: 프레임 읽기 & 결과 표시 =====
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Clean interface: pass image, get result
-        detection = detector.detect_landing_tag(frame)
-        
-        if detection is not None:  # Success
-            cx, cy = detection[0],detection[1]
-            cv2.circle(frame, (int(cx), int(cy)), 10, (0, 0, 255), 2)
+        # 프레임을 워커 큐로
+        in_q.put((frame_index, frame))
+        frame_index += 1
 
-        cv2.imshow("LandingTag Detection", frame)
-        if cv2.waitKey(30) & 0xFF == ord('q'):
+        # 워커가 완료한 결과들을 가능한 만큼 수거
+        try:
+            while True:
+                idx, f, detection = out_q.get_nowait()
+                buffer[idx] = (f, detection)
+        except queue.Empty:
+            pass
+
+        # 원래 순서대로 가능한 만큼 표시
+        while next_index_to_show in buffer:
+            f, detection = buffer.pop(next_index_to_show)
+            if detection is not None:
+                cx, cy = detection
+                cv2.circle(f, (int(cx), int(cy)), 10, (0, 0, 255), 2)
+            cv2.imshow("LandingTag Detection [CPU multithreaded]", f)
+            next_index_to_show += 1
+
+            # UI 반응성 확보
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                cap.release()
+                cv2.destroyAllWindows()
+                # 워커 종료 신호
+                for _ in range(NUM_WORKERS):
+                    in_q.put(None)
+                in_q.join()
+                for t in workers:
+                    t.join(timeout=0.2)
+                sys.exit(0)
+
+    # ===== 모든 입력을 보냈으므로 워커 종료 처리 =====
+    for _ in range(NUM_WORKERS):
+        in_q.put(None)
+    in_q.join()
+
+    # 남은 결과 수거
+    while not out_q.empty():
+        idx, f, detection = out_q.get()
+        buffer[idx] = (f, detection)
+
+    # 남은 것들 순서대로 표시
+    while next_index_to_show in buffer:
+        f, detection = buffer.pop(next_index_to_show)
+        if detection is not None:
+            cx, cy = detection
+            cv2.circle(f, (int(cx), int(cy)), 10, (0, 0, 255), 2)
+        cv2.imshow("LandingTag Detection [CPU multithreaded]", f)
+        next_index_to_show += 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
