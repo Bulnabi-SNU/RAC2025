@@ -7,6 +7,7 @@
 
 import serial
 import struct
+import time
 
 # === Full CRC16 Lookup Table from SIYI Manual === (이 코드가 있어야 시리얼이 잘 맵핑 되는거 같음)
 crc16_tab = [
@@ -63,13 +64,21 @@ def build_packet(cmd_id, payload):
 
 ### Set absolute angle 
 yaw_angle = 0   
-pitch_angle = 0
+pitch_angle = -90
 
 payload = struct.pack('<hh', yaw_angle*10, pitch_angle*10)
 packet = build_packet(0x0E, payload)
 
 # === Send via UART ===
 ser = serial.Serial('/dev/ttyUSB0', baudrate=115200, timeout=1)
-ser.write(packet)
-print(f"Gimbal set to Yaw {yaw_angle:.1f}°, Pitch {pitch_angle:.1f}°")
-ser.close()
+
+try:
+    while True:
+        ser.write(packet)
+        print(f"Gimbal set to Yaw {yaw_angle:.1f}°, Pitch {pitch_angle:.1f}°")
+        # 짧은 딜레이 추가 (선택사항)
+        # time.sleep(0.1)
+except KeyboardInterrupt:
+    print("Stopping gimbal control...")
+finally:
+    ser.close()
