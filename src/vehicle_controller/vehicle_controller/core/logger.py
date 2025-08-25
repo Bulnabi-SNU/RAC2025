@@ -36,7 +36,8 @@ class Logger:
         """Start logging data to a new CSV file."""
         if self.log_file:
             self.log_file.close()
-        
+        self.log_path = "/workspace/flight_logs"
+        os.makedirs(self.log_path, exist_ok=True)
         # Create a new log file with the current date and time
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.log_file = open(os.path.join(self.log_path, f"vehicle_log_{timestamp}.csv"), "w", newline="")

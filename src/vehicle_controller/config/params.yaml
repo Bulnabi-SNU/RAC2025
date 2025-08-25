@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     # Logging
-    do_logging: False  # Enable/disable flight logging
+    do_logging: true  # Enable/disable flight logging
 
     # Control Loop
     timer_period: 0.01  # Control loop time step in seconds

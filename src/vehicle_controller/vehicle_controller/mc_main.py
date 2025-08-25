@@ -1,6 +1,7 @@
 __author__ = "PresidentPlant"
 __contact__ = ""
 
+import os
 import time
 import rclpy
 from rcl_interfaces.msg import SetParametersResult
@@ -120,7 +121,7 @@ class MissionController(PX4BaseController):
         self.offboard_control_mode_params["position"] = True
         self.offboard_control_mode_params["velocity"] = False
         
-        self.logger = Logger(log_path="./flight_logs/")
+        self.logger = Logger(log_path="/workspace/flight_logs")
         self.log_timer = None
         
         self.add_on_set_parameters_callback(self.param_update_callback)
@@ -279,6 +280,7 @@ class MissionController(PX4BaseController):
         """Start flight logging if enabled"""
         if self.do_logging:
             self.logger.start_logging()
+            self.get_logger().info(f"[Logger] Writing to: {os.path.abspath(self.logger.log_path)}")
             self.log_timer = self.create_timer(0.1, self._log_timer_callback)
 
     def _handle_mission_continue(self):
