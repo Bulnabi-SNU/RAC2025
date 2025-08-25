@@ -2,7 +2,6 @@ import time
 import csv
 import numpy as np
 import os
-from datetime import datetime, timedelta
 # Log format: ascii csv
 # Columns: manual(0) or auto(1) mode, event flag (= headed waypoint #), gps time (s), LLA coordinates
 # Creates log with filename that contains the current date and time
@@ -19,37 +18,32 @@ class Logger:
         if self.log_file:
             self.log_file.close()
 
-    def log_data(self, auto_flag, lat, long, alt, gps_time, ax, ay, az, cam, wp):
+    def log_data(self, auto_flag, event_flag, gps_time, lat, long, alt):
         """Log data to the CSV file."""
         # Format gps_time in scientific notation (no rounding specified)
-        # gps_time = np.format_float_scientific(gps_time, trim='k')
-        utc = datetime(1970, 1, 1) + timedelta(microseconds=gps_time)
-
+        gps_time = np.format_float_scientific(gps_time, trim='k')
+        
         # Format latitude, longitude, and altitude to specified precision
         lat = np.format_float_positional(lat, precision=6, trim='k', unique=False)
         long = np.format_float_positional(long, precision=6, trim='k', unique=False)
         alt = np.format_float_positional(alt,precision=1,trim='k', unique=False)
-        ax = np.format_float_positional(ax, precision=3, trim='k')
-        ay = np.format_float_positional(ay, precision=3, trim='k')
-        az = np.format_float_positional(az, precision=3, trim='k')
         
         if self.log_writer:
-            self.log_writer.writerow([auto_flag, lat, long, alt, utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second, utc.microsecond // 1000, ax, ay, az, cam, wp])
+            self.log_writer.writerow([auto_flag, event_flag, gps_time, lat, long, alt])
             self.log_file.flush()
 
     def start_logging(self):   
         """Start logging data to a new CSV file."""
         if self.log_file:
             self.log_file.close()
-        self.log_path = "/workspace/flight_logs"
-        os.makedirs(self.log_path, exist_ok=True)
+        
         # Create a new log file with the current date and time
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.log_file = open(os.path.join(self.log_path, f"vehicle_log_{timestamp}.csv"), "w", newline="")
         self.log_writer = csv.writer(self.log_file)
         
         # Write header
-        self.log_writer.writerow(["Mode", "Latitude", "Longitude", "Altitude", "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Ax", "Ay", "Az", "ImageDetection", "Waypoint"])
+        self.log_writer.writerow(["Mode", "Event Flag", "GPS Time (s)", "Latitude", "Longitude", "Altitude"])
 
 if __name__ == "__main__":
     logger = Logger()
