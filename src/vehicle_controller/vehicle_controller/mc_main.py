@@ -14,6 +14,7 @@ from vehicle_controller.core.px4_base import PX4BaseController
 from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 from custom_msgs.msg import VehicleState, TargetLocation
+from px4_msgs.msg import VehicleAcceleration
 
 
 class MissionState(Enum):
@@ -61,6 +62,8 @@ class MissionController(PX4BaseController):
         self._load_parameters()
         self._initialize_components()
         self._setup_subscribers()
+        self.vehicle_acc = VehicleAcceleration()
+
         
         self.state = MissionState.INIT
         self.target: Optional[TargetLocation] = None
@@ -68,6 +71,8 @@ class MissionController(PX4BaseController):
         self.pickup_complete = False
         self.dropoff_complete = False
         self.target_position = None  # Store position when entering descend/ascend
+        
+        
         
         self.get_logger().info("Mission Controller initialized")
 
@@ -140,6 +145,12 @@ class MissionController(PX4BaseController):
         self.target_subscriber = self.create_subscription(
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
+        self.accel_subscriber = self.create_subscription(
+        VehicleAcceleration,
+        "/fmu/out/vehicle_acceleration",
+        self.on_vehicle_accel_update,
+        self.qos_profile
+)
 
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -246,6 +257,9 @@ class MissionController(PX4BaseController):
     def on_target_update(self, msg: TargetLocation):
         """Callback for target coordinates from image_processing_node"""
         self.target = msg if msg is not None else None
+
+    def on_vehicle_accel_update(self, msg: VehicleAcceleration):
+        self.vehicle_acc = msg
 
     # =======================================
     # State Machine Handlers
@@ -386,6 +400,8 @@ class MissionController(PX4BaseController):
         self.get_logger().error("Mission in error state")
         # TODO: Implement error recovery or emergency procedures
 
+    
+
     def _log_timer_callback(self):
         """Timer callback to log vehicle data"""
         if self.logger is None:
@@ -396,11 +412,15 @@ class MissionController(PX4BaseController):
         event_flag = self.mission_wp_num
         gps_time = self.vehicle_gps.time_utc_usec / 1e6
         
+        
         self.logger.log_data(
             auto_flag, event_flag, gps_time,
             self.vehicle_gps.latitude_deg,
             self.vehicle_gps.longitude_deg,
-            self.vehicle_gps.altitude_ellipsoid_m
+            self.vehicle_gps.altitude_ellipsoid_m,
+            self.vehicle_acc.xyz[0],
+            self.vehicle_acc.xyz[1],
+            self.vehicle_acc.xyz[2]
         )
 
     # Override methods (placeholders for additional functionality)

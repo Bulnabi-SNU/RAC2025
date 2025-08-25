@@ -18,7 +18,7 @@ class Logger:
         if self.log_file:
             self.log_file.close()
 
-    def log_data(self, auto_flag, event_flag, gps_time, lat, long, alt):
+    def log_data(self, auto_flag, event_flag, gps_time, lat, long, alt, ax, ay, az):
         """Log data to the CSV file."""
         # Format gps_time in scientific notation (no rounding specified)
         gps_time = np.format_float_scientific(gps_time, trim='k')
@@ -27,9 +27,12 @@ class Logger:
         lat = np.format_float_positional(lat, precision=6, trim='k', unique=False)
         long = np.format_float_positional(long, precision=6, trim='k', unique=False)
         alt = np.format_float_positional(alt,precision=1,trim='k', unique=False)
+        ax = np.format_float_positional(ax, precision=3, trim='k')
+        ay = np.format_float_positional(ay, precision=3, trim='k')
+        az = np.format_float_positional(az, precision=3, trim='k')
         
         if self.log_writer:
-            self.log_writer.writerow([auto_flag, event_flag, gps_time, lat, long, alt])
+            self.log_writer.writerow([auto_flag, event_flag, gps_time, lat, long, alt, ax, ay, az])
             self.log_file.flush()
 
     def start_logging(self):   
@@ -44,7 +47,7 @@ class Logger:
         self.log_writer = csv.writer(self.log_file)
         
         # Write header
-        self.log_writer.writerow(["Mode", "Event Flag", "GPS Time (s)", "Latitude", "Longitude", "Altitude"])
+        self.log_writer.writerow(["Mode", "Event Flag", "GPS Time (s)", "Latitude", "Longitude", "Altitude", "Accel_X", "Accel_Y", "Accel_Z"])
 
 if __name__ == "__main__":
     logger = Logger()
