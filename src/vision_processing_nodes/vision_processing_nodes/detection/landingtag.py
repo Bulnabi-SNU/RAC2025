@@ -67,7 +67,7 @@ class LandingTagDetector:
         # if ids is not None and len(ids) > 0:
         #     img_pts = corners[0].reshape(-1, 2).astype(np.float32)
         #     tag_center = np.mean(img_pts, axis=0)
-        #     return np.array([tag_center[0], tag_center[1]])
+        #     return (tag_center[0], tag_center[1]), "Apriltag"
 
         """
         2. If Apriltag detection fails, try ellipse fitting. Faster and moderate accuracy.
@@ -88,7 +88,7 @@ class LandingTagDetector:
 
         if len(ellipses) > 0:
             (cx, cy), (maj, minr), ang = ellipses[0]
-            return np.array([cx, cy])
+            return (cx, cy), "Ellipse"
 
         """
         3. Yolo detection - Fast and sound even in the worst (far) conditions. May cause errors.
@@ -114,19 +114,19 @@ class LandingTagDetector:
                     index = i
         
                 # Extract center coordinates
-                x1 = bound_coordinates[index][0] * frame.shape[1]
-                y1 = bound_coordinates[index][1] * frame.shape[0]
-                x2 = bound_coordinates[index][2] * frame.shape[1]
-                y2 = bound_coordinates[index][3] * frame.shape[0]
+                x1 = bound_coordinates[index][0] * image.shape[1]
+                y1 = bound_coordinates[index][1] * image.shape[0]
+                x2 = bound_coordinates[index][2] * image.shape[1]
+                y2 = bound_coordinates[index][3] * image.shape[0]
                 cx = int((x1+x2)/2)
                 cy = int((y1+y2)/2)
-                return np.array([cx, cy])
+                return (cx, cy), "Yolo"
         """
         4. Feature matching - 시도해보았으나 특징이 너무 부족해서인지 실패.
         """
 
         # If everything fails
-        return None
+        return None, {}
 
 
 
