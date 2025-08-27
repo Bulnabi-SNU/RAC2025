@@ -192,7 +192,7 @@ class MissionController(PX4BaseController):
 
 
 
-            MissionState.MOVE_TO_TARGET: lambda: self._handle_move_to_target(MissionState.LANDING_TAG_DESCEND_15M, 5.0, 0.0, 35.0),
+            MissionState.MOVE_TO_TARGET: lambda: self._handle_move_to_target(MissionState.LANDING_TAG_DESCEND_15M, 5.0,0.0,35.0),
             MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_DESCEND_15M),
             MissionState.LANDING_TAG_DESCEND_15M: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 15.0),
             MissionState.LANDING_TAG_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.LANDING_TAG_TRACK_1M, 5.0),
@@ -423,31 +423,43 @@ class MissionController(PX4BaseController):
             self.state = next_state
 
     def _handle_descend_ascend(self, next_state: MissionState, target_altitude: float):
-        """Descend to target position"""
-
-        self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+        """Descend to target altitude"""
+        if self.target_position is None:
+            # Set target once
+            self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+        
+        # Keep publishing the same target until it's reached
         self.publish_setpoint(pos_sp=self.target_position)
+        self.get_logger().info(f"Moving to target altitude: {target_altitude} m")
+        self.get_logger().info(f"Current altitude: {-self.pos[2]} m")
 
-        # Assume drone can hold position well. If not, add checking for acceptance radius xy
-        if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
-            self.publish_setpoint(pos_sp=self.pos)  # Hold current position
-            self.target_position = None  # Reset for next use
-            self.state = next_state
+        # Only check arrival *after* we have a target set
+        if self.target_position is not None:
+            if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
+                self.get_logger().info(f"Reached target altitude: {target_altitude} m")
+                self.publish_setpoint(pos_sp=self.pos)  # Hold current position
+                self.target_position = None  # Reset for next use
+                self.state = next_state
+
 
     def _handle_move_to_target(self, next_state: MissionState, target_x: float, target_y: float, target_z: float):
         """Move to target position"""
-        self.target_position = np.array([target_x, target_y, -target_z]) # NED???
+        if self.target_position is None:
+            self.target_position = np.array([target_x, target_y, -target_z])  # NED
         self.publish_setpoint(pos_sp=self.target_position)
+        self.get_logger().info(f"Moving to target position: {self.target_position} m")
+        self.get_logger().info(f"Current position: {self.pos} m")
 
-        # check arrival within xy acceptance (and a z tolerance)
-        xy_dist = np.linalg.norm(self.pos[:2] - self.target_position[:2])
-        z_dist = abs(self.pos[2] - self.target_position[2])
+        if self.target_position is not None:
+            xy_dist = np.linalg.norm(self.pos[:2] - self.target_position[:2])
+            z_dist  = abs(self.pos[2] - self.target_position[2])
 
-        # allow a looser z tolerance during coarse move (e.g. 2 m)
-        if xy_dist < self.tracking_acceptance_radius_xy and z_dist < 2.0:
-            self.publish_setpoint(pos_sp=self.pos)  # Hold current position
-            self.target_position = None 
-            self.state = next_state
+            if xy_dist < self.tracking_acceptance_radius_xy and z_dist < self.tracking_acceptance_radius_z:
+                self.get_logger().info(f"Reached target position: {self.target_position} m")
+                self.publish_setpoint(pos_sp=self.pos)  # Hold current position
+                self.target_position = None
+                self.state = next_state
+
 
 
     def _handle_gripper_close(self):
