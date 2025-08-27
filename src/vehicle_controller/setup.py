@@ -26,6 +26,8 @@ setup(
             'mc_test_03 = vehicle_controller.mc_test_03_offboard_mission:main',
             'mc_test_04 = vehicle_controller.mc_test_04_track_hover:main',
             'mc_main = vehicle_controller.mc_main:main',
+            'mc_main_temp = vehicle_controller.mc_main_temp:main',
+            'precise_landing = vehicle_controller.precise_landing_test:main'
         ],
     },
 )
