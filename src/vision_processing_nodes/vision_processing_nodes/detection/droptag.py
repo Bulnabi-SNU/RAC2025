@@ -12,9 +12,9 @@ class DropTagDetector:
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
                  lower_red2=np.array([170, 50, 50], dtype=np.uint8),
                  upper_red2=np.array([179, 255, 255], dtype=np.uint8),
-                 min_area=500,
+                 min_area=5000,
                  pause_threshold=0.4,
-                 far_min_pixels=50,
+                 far_min_pixels=1000,
                  roi_margin=0,
                  close_iters=2):
         # 색 범위
