@@ -6,6 +6,4 @@ RAC2025_PX4/
 flight_logs/*
 .devcontainer.json
 
-
-docker-compose.nvidia.yml
 .gitignore
