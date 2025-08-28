@@ -25,15 +25,21 @@ class MissionState(Enum):
     MISSION_EXECUTE = "MISSION_EXECUTE"
     MISSION_TO_OFFBOARD_CASUALTY = "MISSION_TO_OFFBOARD_CASUALTY"
     CASUALTY_TRACK = "CASUALTY_TRACK"
+    CASUALTY_TRACK_5M = "CASUALTY_TRACK_5M"
+    CASUALTY_TRACK_1M = "CASUALTY_TRACK_1M"
     CASUALTY_DESCEND = "CASUALTY_DESCEND"
     GRIPPER_CLOSE = "GRIPPER_CLOSE"
+    CASUALTY_HOVER = "CASUALTY_HOVER"
     CASUALTY_ASCEND = "CASUALTY_ASCEND"
     OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION"
     MISSION_CONTINUE = "MISSION_CONTINUE"
     MISSION_TO_OFFBOARD_DROP_TAG = "MISSION_TO_OFFBOARD_DROP_TAG"
     DROP_TAG_TRACK = "DROP_TAG_TRACK"
+    DROP_TAG_TRACK_5M = "DROP_TAG_TRACK_5M"
+    DROP_TAG_TRACK_1M = "DROP_TAG_TRACK_1M"
     DROP_TAG_DESCEND = "DROP_TAG_DESCEND"
     GRIPPER_OPEN = "GRIPPER_OPEN"
+    DROP_TAG_HOVER = "DROP_TAG_HOVER"
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
     MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG"
 
@@ -43,6 +49,8 @@ class MissionState(Enum):
     LANDING_TAG_TRACK_5M = "LANDING_TAG_TRACK_5M"
     LANDING_TAG_TRACK_1M = "LANDING_TAG_TRACK_1M"
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
+    LANDING_TAG_FINAL_DESCEND = "LANDING_TAG_FINAL_DESCEND"
+    LANDING_TAG_FINAL_HOVER = "LANDING_TAG_FINAL_HOVER"
     LAND = "LAND"
     MISSION_COMPLETE = "MISSION_COMPLETE"
     ERROR = "ERROR"
@@ -84,13 +92,21 @@ class MissionController(PX4BaseController):
         self.dropoff_complete = False
         self.target_position = None  # Store position when entering descend/ascend
 
+        self.start_time=0.0
+        self.end_time=0.0
+        self.hover_position = None
+
         # Constants for detection
         self.TARGET_TYPES = {
             MissionState.CASUALTY_TRACK: 1,
+            MissionState.CASUALTY_TRACK_5M: 1,
+            MissionState.CASUALTY_TRACK_1M: 1,
             MissionState.CASUALTY_DESCEND: 1,
             MissionState.GRIPPER_CLOSE: 1,
             MissionState.CASUALTY_ASCEND: 1,
             MissionState.DROP_TAG_TRACK: 2,
+            MissionState.DROP_TAG_TRACK_5M: 2,
+            MissionState.DROP_TAG_TRACK_1M: 2,
             MissionState.DROP_TAG_DESCEND: 2,
             MissionState.GRIPPER_OPEN: 2,
             MissionState.DROP_TAG_ASCEND: 2,
@@ -193,28 +209,41 @@ class MissionController(PX4BaseController):
 
 
 
-            MissionState.OFFBOARD_TO_MISSION: self._handle_mission_continue,
-            MissionState.MISSION_EXECUTE: self._handle_mission_execute,
-            MissionState.MISSION_TO_OFFBOARD_CASUALTY: lambda: self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK),
-            MissionState.CASUALTY_TRACK: lambda: self._handle_track_target(MissionState.CASUALTY_DESCEND),
-            MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_CLOSE, self.gripper_altitude),
-            MissionState.GRIPPER_CLOSE: self._handle_gripper_close,
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
-            MissionState.MISSION_CONTINUE: self._handle_mission_continue,
-            MissionState.MISSION_TO_OFFBOARD_DROP_TAG: lambda: self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK),
-            MissionState.DROP_TAG_TRACK: lambda: self._handle_track_target(MissionState.DROP_TAG_DESCEND),
-            MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_OPEN, self.gripper_altitude),
-            MissionState.GRIPPER_OPEN: self._handle_gripper_open,
-            MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
+            # MissionState.OFFBOARD_TO_MISSION: self._handle_mission_continue,
+            # MissionState.MISSION_EXECUTE: self._handle_mission_execute,
+            # MissionState.MISSION_TO_OFFBOARD_CASUALTY: lambda: self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK),
+
+
+            MissionState.MOVE_TO_TARGET: lambda: self._handle_descend_ascend(MissionState.DROP_TAG_TRACK_5M, 10.0),
+
+
+            MissionState.CASUALTY_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_DESCEND, 5.0),
+            MissionState.CASUALTY_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_DESCEND, 1.0),
+            MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.CASUALTY_HOVER, self.gripper_altitude),
+            # MissionState.GRIPPER_CLOSE: self._handle_gripper_close,
+            MissionState.CASUALTY_HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, 10.0),
+
+
+            # MissionState.MISSION_CONTINUE: self._handle_mission_continue,
+            # MissionState.MISSION_TO_OFFBOARD_DROP_TAG: lambda: self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK),
+
+            MissionState.DROP_TAG_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.DROP_TAG_DESCEND, 5.0),
+            MissionState.DROP_TAG_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.DROP_TAG_DESCEND, 1.0),
+            MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.DROP_TAG_HOVER, self.gripper_altitude),
+            # MissionState.GRIPPER_OPEN: self._handle_gripper_open,
+            MissionState.DROP_TAG_HOVER: lambda: self._handle_hover(MissionState.DROP_TAG_ASCEND),
+            MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 10.0),
 
 
 
-            MissionState.MOVE_TO_TARGET: lambda: self._handle_move_to_target(MissionState.LANDING_TAG_DESCEND_15M, 5.0,0.0,35.0),
-            MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_DESCEND_15M),
-            MissionState.LANDING_TAG_DESCEND_15M: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 7.0),
+            # MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_DESCEND_15M),
+            # MissionState.LANDING_TAG_DESCEND_15M: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 7.0),
             MissionState.LANDING_TAG_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.LANDING_TAG_TRACK_1M, 5.0),
-            MissionState.LANDING_TAG_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.LAND, 1.0),
-            MissionState.LANDING_TAG_TRACK: lambda: self._handle_track_target(MissionState.LAND),
+            MissionState.LANDING_TAG_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.LANDING_TAG_FINAL_DESCEND, 1.0),
+            # MissionState.LANDING_TAG_TRACK: lambda: self._handle_track_target(MissionState.LAND),
+            MissionState.LANDING_TAG_FINAL_DESCEND: lambda: self._handle_descend_ascend(MissionState.LAND, 0.3),
+            MissionState.LANDING_TAG_FINAL_HOVER: lambda: self._handle_hover(MissionState.LAND, duration=5.0),
             MissionState.LAND: self._handle_land,
             MissionState.MISSION_COMPLETE: self._handle_mission_complete,
             MissionState.ERROR: self._handle_error,
@@ -398,6 +427,7 @@ class MissionController(PX4BaseController):
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
         )
 
+        target_pos = self.manage_offset(target_pos)
         self.publish_setpoint(pos_sp=target_pos)
 
         if arrived:
@@ -444,6 +474,7 @@ class MissionController(PX4BaseController):
         if self.target_position is None:
             # Set target once
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+            
         
         # Keep publishing the same target until it's reached
         self.publish_setpoint(pos_sp=self.target_position)
@@ -477,6 +508,27 @@ class MissionController(PX4BaseController):
                 self.target_position = None
                 self.state = next_state
 
+
+    def _handle_hover(self, next_state: MissionState, duration=10.0):
+        now_sec = self.get_clock().now().nanoseconds / 1e9  # float in seconds
+
+        if self.start_time == 0.0 and self.end_time == 0.0:
+            self.start_time = now_sec
+            self.end_time = self.start_time + duration
+        
+        if self.hover_position is None:
+            self.hover_position = self.pos
+
+        self.get_logger().info(f"Hovering for {duration} seconds")
+        self.publish_setpoint(pos_sp=self.hover_position)
+
+        if now_sec >= self.end_time:
+            self.get_logger().info("Hover complete")
+            self.start_time = 0.0
+            self.end_time = 0.0
+            self.hover_position = None
+            self.state = next_state
+            
 
 
     def _handle_gripper_close(self):
@@ -534,12 +586,16 @@ class MissionController(PX4BaseController):
             self.vehicle_acc.xyz[1],
             self.vehicle_acc.xyz[2]
         )
+        
+
+
 
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
     def on_attitude_update(self, msg): pass
     def on_global_position_update(self, msg): pass
+
 
 
 def main(args=None):
