@@ -214,26 +214,16 @@ class MissionController(PX4BaseController):
             # MissionState.MISSION_TO_OFFBOARD_CASUALTY: lambda: self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK),
 
 
-            MissionState.MOVE_TO_TARGET: lambda: self._handle_descend_ascend(MissionState.DROP_TAG_TRACK_5M, 10.0),
+            MissionState.MOVE_TO_TARGET: lambda: self._handle_descend_ascend(MissionState.CASUALTY_TRACK_5M, 2.0),
 
 
-            MissionState.CASUALTY_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_DESCEND, 5.0),
-            MissionState.CASUALTY_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_DESCEND, 1.0),
-            MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.CASUALTY_HOVER, self.gripper_altitude),
+            MissionState.CASUALTY_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_TRACK_1M, 1.0),
+            MissionState.CASUALTY_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.CASUALTY_HOVER, 0.3),
             # MissionState.GRIPPER_CLOSE: self._handle_gripper_close,
             MissionState.CASUALTY_HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND),
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, 10.0),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 3.0),
 
 
-            # MissionState.MISSION_CONTINUE: self._handle_mission_continue,
-            # MissionState.MISSION_TO_OFFBOARD_DROP_TAG: lambda: self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK),
-
-            MissionState.DROP_TAG_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.DROP_TAG_DESCEND, 5.0),
-            MissionState.DROP_TAG_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.DROP_TAG_DESCEND, 1.0),
-            MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.DROP_TAG_HOVER, self.gripper_altitude),
-            # MissionState.GRIPPER_OPEN: self._handle_gripper_open,
-            MissionState.DROP_TAG_HOVER: lambda: self._handle_hover(MissionState.DROP_TAG_ASCEND),
-            MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 10.0),
 
 
 
