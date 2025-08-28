@@ -58,16 +58,16 @@ class LandingTagDetector:
         1. Apriltag detection - Slow but soundness approved. Either use GPU or discard.
         """
         
-        # dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
-        # detector   = cv2.aruco.ArucoDetector(dictionary, self._create_params())
+        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
+        detector   = cv2.aruco.ArucoDetector(dictionary, self._create_params())
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # corners, ids, _ = detector.detectMarkers(gray)
+        corners, ids, _ = detector.detectMarkers(gray)
 
-        # if ids is not None and len(ids) > 0:
-        #     img_pts = corners[0].reshape(-1, 2).astype(np.float32)
-        #     tag_center = np.mean(img_pts, axis=0)
-        #     return (tag_center[0], tag_center[1]), "Apriltag"
+        if ids is not None and len(ids) > 0:
+            img_pts = corners[0].reshape(-1, 2).astype(np.float32)
+            tag_center = np.mean(img_pts, axis=0)
+            return (tag_center[0], tag_center[1]), "Apriltag"
 
         """
         2. If Apriltag detection fails, try ellipse fitting. Faster and moderate accuracy.
