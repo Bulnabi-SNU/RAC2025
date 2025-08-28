@@ -8,9 +8,9 @@ import cv2
 
 class CasualtyDetector:
     def __init__(self, 
-                 lower_red1=np.array([0, 50, 100], dtype=np.uint8),
+                 lower_red1=np.array([0, 100, 190], dtype=np.uint8), # 비행시험용 코드만 volume값 많이 올렸음(비행시험하고 재조정 필요할 듯)
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
-                 lower_red2=np.array([170, 50, 100], dtype=np.uint8),
+                 lower_red2=np.array([170, 100, 190], dtype=np.uint8),
                  upper_red2=np.array([180, 255, 255], dtype=np.uint8),
                  min_area: float = 500.0,
                  use_open: bool = True,
