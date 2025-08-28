@@ -7,9 +7,9 @@ import cv2
 
 class CasualtyDetector:
     def __init__(self, 
-                 lower_red1=np.array([0, 100, 150], dtype=np.uint8),
+                 lower_red1=np.array([0, 50, 100], dtype=np.uint8),
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
-                 lower_red2=np.array([170, 100, 150], dtype=np.uint8),
+                 lower_red2=np.array([170, 50, 100], dtype=np.uint8),
                  upper_red2=np.array([180, 255, 255], dtype=np.uint8),
                  min_area: float = 500.0,
                  use_open: bool = True,
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     import sys
 
     detector = CasualtyDetector(use_open=True, open_iters=1, close_iters=2)
-    src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/data/1000011262.mp4"
+    src = sys.argv[1] if len(sys.argv) > 1 else "path.mp4"
     cap = cv2.VideoCapture(int(src)) if src.isdigit() else cv2.VideoCapture(src)
 
     if not cap.isOpened():
