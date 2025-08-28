@@ -52,19 +52,21 @@ class MissionController(PX4BaseController):
     """Mission Controller for the actual competition."""
 
     # Constants
-    TARGET_TYPES = {
-        MissionState.CASUALTY_TRACK: 1,
-        MissionState.CASUALTY_DESCEND: 1,
-        MissionState.GRIPPER_CLOSE: 1,
-        MissionState.CASUALTY_ASCEND: 1,
-        MissionState.DROP_TAG_TRACK: 2,
-        MissionState.DROP_TAG_DESCEND: 2,
-        MissionState.GRIPPER_OPEN: 2,
-        MissionState.DROP_TAG_ASCEND: 2,
-        MissionState.LANDING_TAG_TRACK: 3,
-        MissionState.LANDING_TAG_TRACK_5M: 3,
-        MissionState.LANDING_TAG_TRACK_1M: 3,
-    }
+    # TARGET_TYPES = {
+    #     MissionState.CASUALTY_TRACK: 1,
+    #     MissionState.CASUALTY_DESCEND: 1,
+    #     MissionState.GRIPPER_CLOSE: 1,
+    #     MissionState.CASUALTY_ASCEND: 1,
+    #     MissionState.DROP_TAG_TRACK: 2,
+    #     MissionState.DROP_TAG_DESCEND: 2,
+    #     MissionState.GRIPPER_OPEN: 2,
+    #     MissionState.DROP_TAG_ASCEND: 2,
+    #     MissionState.LANDING_TAG_TRACK: 3,
+    #     MissionState.LANDING_TAG_TRACK_5M: 3,
+    #     MissionState.LANDING_TAG_TRACK_1M: 3,
+    # }
+
+
 
     def __init__(self):
         super().__init__("mc_main")
@@ -81,6 +83,21 @@ class MissionController(PX4BaseController):
         self.pickup_complete = False
         self.dropoff_complete = False
         self.target_position = None  # Store position when entering descend/ascend
+
+        # Constants for detection
+        self.TARGET_TYPES = {
+            MissionState.CASUALTY_TRACK: 1,
+            MissionState.CASUALTY_DESCEND: 1,
+            MissionState.GRIPPER_CLOSE: 1,
+            MissionState.CASUALTY_ASCEND: 1,
+            MissionState.DROP_TAG_TRACK: 2,
+            MissionState.DROP_TAG_DESCEND: 2,
+            MissionState.GRIPPER_OPEN: 2,
+            MissionState.DROP_TAG_ASCEND: 2,
+            MissionState.LANDING_TAG_TRACK: 3,
+            MissionState.LANDING_TAG_TRACK_5M: 3,
+            MissionState.LANDING_TAG_TRACK_1M: 3,
+        }
 
         # landing detection counter (count only; required threshold comes from ROS param)
         self.landing_detection_count = 0
@@ -194,7 +211,7 @@ class MissionController(PX4BaseController):
 
             MissionState.MOVE_TO_TARGET: lambda: self._handle_move_to_target(MissionState.LANDING_TAG_DESCEND_15M, 5.0,0.0,35.0),
             MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_DESCEND_15M),
-            MissionState.LANDING_TAG_DESCEND_15M: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 15.0),
+            MissionState.LANDING_TAG_DESCEND_15M: lambda: self._handle_descend_ascend(MissionState.LANDING_TAG_TRACK_5M, 7.0),
             MissionState.LANDING_TAG_TRACK_5M: lambda: self._handle_landing_track_to_alt(MissionState.LANDING_TAG_TRACK_1M, 5.0),
             MissionState.LANDING_TAG_TRACK_1M: lambda: self._handle_landing_track_to_alt(MissionState.LAND, 1.0),
             MissionState.LANDING_TAG_TRACK: lambda: self._handle_track_target(MissionState.LAND),
