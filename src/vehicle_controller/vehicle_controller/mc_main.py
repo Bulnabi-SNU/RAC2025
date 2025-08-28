@@ -400,7 +400,6 @@ class MissionController(PX4BaseController):
         self.get_logger().error("Mission in error state")
         # TODO: Implement error recovery or emergency procedures
 
-    
 
     def _log_timer_callback(self):
         """Timer callback to log vehicle data"""
@@ -414,13 +413,16 @@ class MissionController(PX4BaseController):
         
         
         self.logger.log_data(
-            auto_flag, event_flag, gps_time,
-            self.vehicle_gps.latitude_deg,
-            self.vehicle_gps.longitude_deg,
-            self.vehicle_gps.altitude_ellipsoid_m,
-            self.vehicle_acc.xyz[0],
-            self.vehicle_acc.xyz[1],
-            self.vehicle_acc.xyz[2]
+            auto_flag,                                          #1                                         
+            self.vehicle_gps.latitude_deg,                      #2
+            self.vehicle_gps.longitude_deg,                     #3                
+            self.vehicle_gps.altitude_ellipsoid_m,              #4
+            gps_time,                                           #5
+            self.vehicle_acc.xyz[0],                            #6
+            self.vehicle_acc.xyz[1],                            #7
+            self.vehicle_acc.xyz[2],                            #8
+            auto_flag,                                          #9
+            event_flag                                          #10
         )
 
     # Override methods (placeholders for additional functionality)

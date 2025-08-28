@@ -64,7 +64,7 @@ def build_packet(cmd_id, payload):
 
 ### Set absolute angle 
 yaw_angle = 0   
-pitch_angle = -90
+pitch_angle = 0
 
 payload = struct.pack('<hh', yaw_angle*10, pitch_angle*10)
 packet = build_packet(0x0E, payload)
