@@ -19,7 +19,7 @@ class Logger:
         if self.log_file:
             self.log_file.close()
 
-    def log_data(self, auto_flag, lat, long, alt, gps_time, ax, ay, az, cam, wp):
+    def log_data(self, auto_flag, lat, long, alt, gps_time, ax, ay, az, est_ax, est_ay, est_az, roll, pitch, yaw, cam, wp):
         """Log data to the CSV file."""
         # Format gps_time in scientific notation (no rounding specified)
         # gps_time = np.format_float_scientific(gps_time, trim='k')
@@ -32,9 +32,16 @@ class Logger:
         ax = np.format_float_positional(ax, precision=3, trim='k')
         ay = np.format_float_positional(ay, precision=3, trim='k')
         az = np.format_float_positional(az, precision=3, trim='k')
+
+        est_ax = np.format_float_positional(est_ax, precision=3, trim='k')
+        est_ay = np.format_float_positional(est_ay, precision=3, trim='k')
+        est_az = np.format_float_positional(est_az, precision=3, trim='k')
+        roll = np.format_float_positional(roll, precision=4, trim='k') 
+        pitch = np.format_float_positional(pitch, precision=4, trim='k') 
+        yaw = np.format_float_positional(yaw, precision=4, trim='k') 
         
         if self.log_writer:
-            self.log_writer.writerow([auto_flag, lat, long, alt, utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second, utc.microsecond // 1000, ax, ay, az, cam, wp])
+            self.log_writer.writerow([auto_flag, lat, long, alt, utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second, utc.microsecond // 1000, ax, ay, az, est_ax, est_ay, est_az, roll, pitch, yaw, cam, wp])
             self.log_file.flush()
 
     def start_logging(self):   
@@ -49,7 +56,7 @@ class Logger:
         self.log_writer = csv.writer(self.log_file)
         
         # Write header
-        self.log_writer.writerow(["Mode", "Latitude", "Longitude", "Altitude", "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Ax", "Ay", "Az", "ImageDetection", "Waypoint"])
+        self.log_writer.writerow(["Mode", "Latitude", "Longitude", "Altitude", "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Ax", "Ay", "Az", "EstAx", "EstAy", "EstAz", "Roll", "Pitch", "Yaw", "ImageDetection", "Waypoint"])
 
 if __name__ == "__main__":
     logger = Logger()
