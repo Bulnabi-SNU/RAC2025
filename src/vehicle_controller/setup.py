@@ -28,7 +28,8 @@ setup(
             'mc_main = vehicle_controller.mc_main:main',
             'mc_main_temp = vehicle_controller.mc_main_temp:main',
             'precise_landing = vehicle_controller.precise_landing_test:main',
-            'precise_landing_basket = vehicle_controller.precise_landing_basket_test:main'
+            'precise_landing_basket = vehicle_controller.precise_landing_basket_test:main',
+            'test_logger = vehicle_controller.mc_test_logger:main',
         ],
     },
 )
