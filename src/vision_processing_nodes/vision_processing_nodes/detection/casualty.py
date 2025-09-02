@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 
 
-class BasketTwoStageDetector:
+class CasualtyDetector:
 
     def __init__(self,
                  # --- Green (판) HSV ---
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     import sys
 
     # 예: RED-ONLY 테스트 시 red_only=True, 2단계 전체 동작 시 red_only=False
-    detector = BasketTwoStageDetector(
+    detector = CasualtyDetector(
         min_area_green_ratio=0.0054253472,   # (red_only=True면 미사용)
         min_area_red_ratio=0.0005425347,     # ≈  500 / 921600
         green_ratio_threshold=0.25,          # (red_only=True면 미사용)
@@ -299,4 +299,3 @@ if __name__ == "__main__":
 
     cap.release()
     cv2.destroyAllWindows()
-
