@@ -9,17 +9,17 @@ from typing import Optional, Tuple
 
 class DropTagDetector:
     def __init__(self,
-                 lower_red1=np.array([0, 50, 130], dtype=np.uint8),
+                 lower_red1=np.array([0, 100, 120], dtype=np.uint8),
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
-                 lower_red2=np.array([170, 50, 130], dtype=np.uint8),
+                 lower_red2=np.array([170, 100, 120], dtype=np.uint8),
                  upper_red2=np.array([179, 255, 255], dtype=np.uint8),
-                 # 기본값을 1280x720 기준 비율로 설정 (하위호환: >1.0이면 절대 픽셀 수로 처리)
-                 #   5000 / 921600 ≈ 0.0054253472
-                 #   1000 / 921600 ≈ 0.0010850694
+                 # 비율 입력(≤1.0) 시 해상도/ROI 무관 동작
+                 # 1280x720 기준 예: 5000/921600 ≈ 0.0054253472
                  min_area=0.0054253472,
-                 pause_threshold=0.3,
+                 pause_threshold=0.25,
+                 # far 모드 제거했지만, 하위호환을 위해 파라미터는 보존
                  far_min_pixels=0.0010850694,
-                 roi_margin=0,
+                 roi_margin=0.0,
                  close_iters=2):
         # 색 범위
         self.lower_red1 = lower_red1
@@ -27,10 +27,10 @@ class DropTagDetector:
         self.lower_red2 = lower_red2
         self.upper_red2 = upper_red2
 
-        # 임계 (≤1.0이면 비율, >1.0이면 절대 픽셀 수)
+        # 임계(≤1.0이면 비율, >1.0이면 절대 픽셀)
         self.min_area = float(min_area)
         self.pause_threshold = float(pause_threshold)
-        self.far_min_pixels = float(far_min_pixels)
+        self.far_min_pixels = float(far_min_pixels)  # (미사용; 하위호환 유지)
 
         # 최적화
         self.roi_margin = float(roi_margin)
@@ -40,7 +40,12 @@ class DropTagDetector:
         # 상태
         self.perma_paused = False
         self.detection_paused = False
-        self.last_mode = ""
+        self.last_mode = ""  # "close"만 사용 (far 제거)
+
+        try:
+            cv2.setUseOptimized(True)
+        except Exception:
+            pass
 
     def detect_drop_tag(self, frame):
         if frame is None or len(frame.shape) != 3:
@@ -52,48 +57,47 @@ class DropTagDetector:
 
         h, w = frame.shape[:2]
 
-        # ---------- 전체 프레임 픽셀 기준으로 절대 임계치 환산 ----------
-        min_area_abs, far_min_abs = self._resolve_thresholds(w, h)
-
-        # ---------- ROI 영역만 ----------
+        # ---------- ROI 계산 ----------
         x0, y0, x1, y1 = self._roi_box(w, h, self.roi_margin)
         roi_bgr = frame[y0:y1, x0:x1]
+        rh, rw = roi_bgr.shape[:2]
+        if rh <= 0 or rw <= 0:
+            return None, None
 
-        # HSV 변환은 ROI에서만
+        # ---------- ROI 기준 절대 임계치 환산(비율 입력 지원) ----------
+        min_area_abs, _ = self._resolve_thresholds(rw, rh)  # far_min은 미사용
+
+        # ---------- HSV/마스크 (ROI만) ----------
         hsv_roi = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
         mask_roi = self._mask_red(hsv_roi)
 
+        # 아크릴 반사로 생기는 구멍 메우기
         if self.close_iters > 0:
             mask_roi = cv2.morphologyEx(mask_roi, cv2.MORPH_CLOSE, self.kernel, iterations=self.close_iters)
 
-        # ROI 내 red ratio 계산 (ROI 사이즈 대비)
-        red_ratio = cv2.countNonZero(mask_roi) / ((y1 - y0) * (x1 - x0))
+        # ---------- ROI 내 red ratio ----------
+        roi_area = float(rw * rh)
+        red_ratio = cv2.countNonZero(mask_roi) / roi_area if roi_area > 0 else 0.0
 
-        # pause 
+        # 퍼머넌트 일시정지 (태그가 화면 대부분일 때 하강/정지 상황 가정)
         if red_ratio > self.pause_threshold:
             self.perma_paused = True
             self.detection_paused = True
             return None, None
         self.detection_paused = False
 
-        # 가까이: contour 중심 (임계면적은 전체 프레임 기준으로 환산된 절대값 사용)
+        # ---------- 가까이: 컨투어 중심(유일 모드, far 제거) ----------
         center_roi = self._centroid_from_contours(mask_roi, min_area_abs)
         if center_roi is not None:
             self.last_mode = "close"
             cx, cy = self._map_from_roi(center_roi, x0, y0)
-            return np.array([cx, cy]), np.array([red_ratio])
+            return np.array([cx, cy]), np.array([red_ratio], dtype=np.float32)
 
-        # 멀리: 픽셀 평균 (최소 픽셀 수도 전체 프레임 기준으로 환산된 절대값 사용)
-        far_center = self._mean_from_mask(mask_roi, int(far_min_abs))
-        if far_center is not None:
-            self.last_mode = "far"
-            cx, cy = self._map_from_roi(far_center, x0, y0)
-            return np.array([cx, cy]), np.array([red_ratio])
-
+        # 미검출
         self.last_mode = ""
         return None, None
 
-    # 내부 함수들
+    # ---------------- 내부 함수들 ----------------
     def _mask_red(self, hsv):
         m1 = cv2.inRange(hsv, self.lower_red1, self.upper_red1)
         m2 = cv2.inRange(hsv, self.lower_red2, self.upper_red2)
@@ -114,30 +118,27 @@ class DropTagDetector:
         if cv2.contourArea(cnt) < float(min_area_abs):
             return None
         M = cv2.moments(cnt)
-        if M['m00'] == 0:
+        m00 = M.get('m00', 0.0)
+        if m00 <= 1e-6:
             return None
-        return (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
-
-    def _mean_from_mask(self, mask, min_pix_abs: int):
-        ys, xs = np.where(mask > 0)
-        if len(xs) < int(min_pix_abs):
-            return None
-        return (int(xs.mean()), int(ys.mean()))
+        return (int(M['m10'] / m00), int(M['m01'] / m00))
 
     def _map_from_roi(self, pt, x0, y0):
         cx, cy = pt
         return x0 + cx, y0 + cy
 
     def _resolve_thresholds(self, w: int, h: int):
-        """전체 프레임 픽셀 수(w*h) 기준으로 절대 임계치 환산."""
+        """
+        전달된 w*h를 전체 픽셀수로 보고,
+        - min_area: ≤1.0 → 비율*픽셀수, >1.0 → 절대 픽셀
+        - far_min_pixels: 동일 규칙(현재 미사용)
+        """
         total = float(w * h)
-        # min_area: ≤1.0 → 비율로 간주, >1.0 → 이미 절대 픽셀
         if self.min_area <= 1.0:
             min_area_abs = self.min_area * total
         else:
             min_area_abs = self.min_area
 
-        # far_min_pixels: ≤1.0 → 비율로 간주, >1.0 → 이미 절대 픽셀
         if self.far_min_pixels <= 1.0:
             far_min_abs = self.far_min_pixels * total
         else:
@@ -147,19 +148,21 @@ class DropTagDetector:
 
 
 # ==============================
-# Test code (원 구조 유지)
+# Test code 
 # ==============================
 if __name__ == "__main__":
     import argparse, time
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--video", type=str, default="/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/last_video.MP4")
+    parser.add_argument("--video", type=str, default="/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/path.mp4")
     parser.add_argument("--width", type=int, default=640, help="capture width")
-    parser.add_argument("--height", type=int, default=480, help="capture height") # can change resolution (640x480 or 320x240)
-    parser.add_argument("--skip-sec", type=int, default=65, help="start playing from t = n seconds")
+    parser.add_argument("--height", type=int, default=480, help="capture height")
+    parser.add_argument("--skip-sec", type=int, default=10, help="start playing from t = n seconds")
+    parser.add_argument("--roi-margin", type=float, default=0.0, help="0.0~0.45 권장, ROI 크기 비율")
+    parser.add_argument("--close-iters", type=int, default=2, help="morph close iterations (fill holes)")
     args = parser.parse_args()
 
-    # --- 입력이 웹캠인지 파일인지 판별
+    # 웹캠/파일 구분
     is_camera = args.video.isdigit()
 
     cap = cv2.VideoCapture(int(args.video) if is_camera else args.video)
@@ -167,18 +170,16 @@ if __name__ == "__main__":
         print(f"[ERROR] Cannot open {args.video}")
         exit(1)
 
-    # 처음부터 해상도 낮춰 읽기
+    # 입력 해상도
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
 
-    # --- robust skip after start
+    # 시크/지연
     def jump_to_seconds(capture, seconds):
-        """파일일 때: 타임시크. 웹캠일 때: 시작 지연."""
         if seconds <= 0:
             return
         if is_camera:
-            time.sleep(seconds)
-            return
+            time.sleep(seconds); return
         try:
             capture.set(cv2.CAP_PROP_POS_MSEC, float(seconds) * 1000.0)
         except Exception:
@@ -192,11 +193,11 @@ if __name__ == "__main__":
             pass
 
     jump_to_seconds(cap, args.skip_sec)
-
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
 
-    det = DropTagDetector()
+    det = DropTagDetector(roi_margin=args.roi_margin, close_iters=args.close_iters)
 
+    print("Press 'q' to quit")
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -206,14 +207,17 @@ if __name__ == "__main__":
         disp = frame.copy()
 
         if detection is not None:
-            cv2.circle(disp, tuple(detection), 10, (0, 0, 255), 2)
-            cv2.putText(disp, f"({detection[0]}, {detection[1]}) mode={det.last_mode}", 
+            cv2.circle(disp, tuple(detection.astype(int)), 10, (0, 0, 255), 2)
+            cv2.putText(disp, f"({int(detection[0])}, {int(detection[1])}) mode={det.last_mode}",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+            if red_ratio is not None:
+                cv2.putText(disp, f"red ratio={float(red_ratio[0]):.3f}",
+                            (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
         else:
             msg = "PAUSED" if det.perma_paused else "No detection"
             cv2.putText(disp, msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,215,255), 2)
 
-        cv2.imshow("DropTag Test Optimized", disp)
+        cv2.imshow("DropTag Detection (Contour-only, no FAR)", disp)
         key = cv2.waitKey(int(1000/fps)) & 0xFF
         if key == ord('q'):
             break
