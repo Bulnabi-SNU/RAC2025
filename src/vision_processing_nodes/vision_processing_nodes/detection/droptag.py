@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -8,13 +9,16 @@ from typing import Optional, Tuple
 
 class DropTagDetector:
     def __init__(self,
-                 lower_red1=np.array([0, 50, 50], dtype=np.uint8),
+                 lower_red1=np.array([0, 50, 130], dtype=np.uint8),
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
-                 lower_red2=np.array([170, 50, 50], dtype=np.uint8),
+                 lower_red2=np.array([170, 50, 130], dtype=np.uint8),
                  upper_red2=np.array([179, 255, 255], dtype=np.uint8),
-                 min_area=5000,
-                 pause_threshold=0.4,
-                 far_min_pixels=1000,
+                 # 기본값을 1280x720 기준 비율로 설정 (하위호환: >1.0이면 절대 픽셀 수로 처리)
+                 #   5000 / 921600 ≈ 0.0054253472
+                 #   1000 / 921600 ≈ 0.0010850694
+                 min_area=0.0054253472,
+                 pause_threshold=0.3,
+                 far_min_pixels=0.0010850694,
                  roi_margin=0,
                  close_iters=2):
         # 색 범위
@@ -23,10 +27,10 @@ class DropTagDetector:
         self.lower_red2 = lower_red2
         self.upper_red2 = upper_red2
 
-        # 임계
+        # 임계 (≤1.0이면 비율, >1.0이면 절대 픽셀 수)
         self.min_area = float(min_area)
         self.pause_threshold = float(pause_threshold)
-        self.far_min_pixels = int(far_min_pixels)
+        self.far_min_pixels = float(far_min_pixels)
 
         # 최적화
         self.roi_margin = float(roi_margin)
@@ -48,6 +52,9 @@ class DropTagDetector:
 
         h, w = frame.shape[:2]
 
+        # ---------- 전체 프레임 픽셀 기준으로 절대 임계치 환산 ----------
+        min_area_abs, far_min_abs = self._resolve_thresholds(w, h)
+
         # ---------- ROI 영역만 ----------
         x0, y0, x1, y1 = self._roi_box(w, h, self.roi_margin)
         roi_bgr = frame[y0:y1, x0:x1]
@@ -59,7 +66,7 @@ class DropTagDetector:
         if self.close_iters > 0:
             mask_roi = cv2.morphologyEx(mask_roi, cv2.MORPH_CLOSE, self.kernel, iterations=self.close_iters)
 
-        # ROI 내 red ratio 계산 (전체 대비 비율로 맞추기 위해 ROI 사이즈 사용)
+        # ROI 내 red ratio 계산 (ROI 사이즈 대비)
         red_ratio = cv2.countNonZero(mask_roi) / ((y1 - y0) * (x1 - x0))
 
         # pause 
@@ -69,15 +76,15 @@ class DropTagDetector:
             return None, None
         self.detection_paused = False
 
-        # 가까이: contour 중심
-        center_roi = self._centroid_from_contours(mask_roi)
+        # 가까이: contour 중심 (임계면적은 전체 프레임 기준으로 환산된 절대값 사용)
+        center_roi = self._centroid_from_contours(mask_roi, min_area_abs)
         if center_roi is not None:
             self.last_mode = "close"
             cx, cy = self._map_from_roi(center_roi, x0, y0)
             return np.array([cx, cy]), np.array([red_ratio])
 
-        # 멀리: 픽셀 평균
-        far_center = self._mean_from_mask(mask_roi, self.far_min_pixels)
+        # 멀리: 픽셀 평균 (최소 픽셀 수도 전체 프레임 기준으로 환산된 절대값 사용)
+        far_center = self._mean_from_mask(mask_roi, int(far_min_abs))
         if far_center is not None:
             self.last_mode = "far"
             cx, cy = self._map_from_roi(far_center, x0, y0)
@@ -99,21 +106,21 @@ class DropTagDetector:
             return 0, 0, w, h
         return x0, y0, x1, y1
 
-    def _centroid_from_contours(self, mask):
+    def _centroid_from_contours(self, mask, min_area_abs: float):
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
         cnt = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(cnt) < self.min_area:
+        if cv2.contourArea(cnt) < float(min_area_abs):
             return None
         M = cv2.moments(cnt)
         if M['m00'] == 0:
             return None
         return (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
 
-    def _mean_from_mask(self, mask, min_pix):
+    def _mean_from_mask(self, mask, min_pix_abs: int):
         ys, xs = np.where(mask > 0)
-        if len(xs) < min_pix:
+        if len(xs) < int(min_pix_abs):
             return None
         return (int(xs.mean()), int(ys.mean()))
 
@@ -121,21 +128,41 @@ class DropTagDetector:
         cx, cy = pt
         return x0 + cx, y0 + cy
 
+    def _resolve_thresholds(self, w: int, h: int):
+        """전체 프레임 픽셀 수(w*h) 기준으로 절대 임계치 환산."""
+        total = float(w * h)
+        # min_area: ≤1.0 → 비율로 간주, >1.0 → 이미 절대 픽셀
+        if self.min_area <= 1.0:
+            min_area_abs = self.min_area * total
+        else:
+            min_area_abs = self.min_area
+
+        # far_min_pixels: ≤1.0 → 비율로 간주, >1.0 → 이미 절대 픽셀
+        if self.far_min_pixels <= 1.0:
+            far_min_abs = self.far_min_pixels * total
+        else:
+            far_min_abs = self.far_min_pixels
+
+        return float(min_area_abs), float(far_min_abs)
+
 
 # ==============================
-# Test code
+# Test code (원 구조 유지)
 # ==============================
 if __name__ == "__main__":
     import argparse, time
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--video", type=str, default="/workspace/data/droptag_drone.avi")  # 0 for testing with webcam
+    parser.add_argument("--video", type=str, default="/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/last_video.MP4")
     parser.add_argument("--width", type=int, default=640, help="capture width")
     parser.add_argument("--height", type=int, default=480, help="capture height") # can change resolution (640x480 or 320x240)
-    parser.add_argument("--skip-sec", type=int, default=3, help="skip first n seconds")
+    parser.add_argument("--skip-sec", type=int, default=65, help="start playing from t = n seconds")
     args = parser.parse_args()
 
-    cap = cv2.VideoCapture(args.video if not args.video.isdigit() else int(args.video))
+    # --- 입력이 웹캠인지 파일인지 판별
+    is_camera = args.video.isdigit()
+
+    cap = cv2.VideoCapture(int(args.video) if is_camera else args.video)
     if not cap.isOpened():
         print(f"[ERROR] Cannot open {args.video}")
         exit(1)
@@ -144,8 +171,29 @@ if __name__ == "__main__":
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
 
+    # --- robust skip after start
+    def jump_to_seconds(capture, seconds):
+        """파일일 때: 타임시크. 웹캠일 때: 시작 지연."""
+        if seconds <= 0:
+            return
+        if is_camera:
+            time.sleep(seconds)
+            return
+        try:
+            capture.set(cv2.CAP_PROP_POS_MSEC, float(seconds) * 1000.0)
+        except Exception:
+            pass
+        fps_local = capture.get(cv2.CAP_PROP_FPS)
+        if not fps_local or fps_local <= 1e-3:
+            fps_local = 30.0
+        try:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, int(fps_local * seconds))
+        except Exception:
+            pass
+
+    jump_to_seconds(cap, args.skip_sec)
+
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    cap.set(cv2.CAP_PROP_POS_FRAMES, int(fps * args.skip_sec))
 
     det = DropTagDetector()
 
