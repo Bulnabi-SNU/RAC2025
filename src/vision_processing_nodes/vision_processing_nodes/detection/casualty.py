@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -12,7 +13,7 @@ class CasualtyDetector:
                  #lower_green=np.array([45, 50, 40], dtype=np.uint8),
                  #upper_green=np.array([85, 255, 255], dtype=np.uint8),
 
-                 # real range for "yawn green" (지금은 red-only 테스트라 미사용 가능)
+                 # real range for "yawn green" (if red_only = True, 미사용 가능)
                  lower_green=np.array([50, 70, 140], dtype=np.uint8),
                  upper_green=np.array([65, 255, 255], dtype=np.uint8),
 
@@ -20,7 +21,7 @@ class CasualtyDetector:
                  lower_red1=np.array([0, 100, 120], dtype=np.uint8),
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
                  lower_red2=np.array([170, 100, 120], dtype=np.uint8),
-                 upper_red2=np.array([180, 255, 255], dtype=np.uint8),
+                 upper_red2=np.array([179, 255, 255], dtype=np.uint8),
 
                  # 1280x720 기준 (총 921,600px):
                  #   green 5000px  ≈ 0.0054253472
@@ -28,7 +29,7 @@ class CasualtyDetector:
                  min_area_green_ratio: float = 0.0054253472,
                  min_area_red_ratio: float = 0.0005425347,
 
-                 green_ratio_threshold: float = 0.40,  # (red_only=False일 때 사용)
+                 green_ratio_threshold: float = 0.25,  # (red_only=False일 때 사용)
                  use_open: bool = True,
                  open_iters: int = 1,
                  close_iters: int = 2,
@@ -42,7 +43,7 @@ class CasualtyDetector:
                  min_mean_s: int = 60,             # (미사용)
 
                  # ------ 추가: 빨간 전용 테스트 스위치 ------
-                 red_only: bool = True
+                 red_only: bool = False
                  ):
         # HSV 범위
         self.lower_green = lower_green
@@ -108,20 +109,21 @@ class CasualtyDetector:
 
             # 전환 판단
             if green_ratio >= self.green_ratio_threshold:
+                # ★ 변경점: 같은 프레임에서 즉시 RED로 전환하여 반환
                 self.red_mode = True
+                center = self._red_center_ratio(frame)
+                return 'RED', center, {}
 
-            # 전환 전이라면 초록 중심 반환
-            #  ※ 요청대로 GREEN에는 면적 비율만 사용(다른 모든 게이트 제거)
-            if not self.red_mode:
-                center = self._largest_contour_center_ratio(
-                    frame, self.lower_green, self.upper_green, self.min_area_green_ratio
-                )
-                return 'GREEN', center, {
-                    'green_ratio': green_ratio,
-                    'mask_small_shape': green_mask_small_shape
-                }
+            # 전환 전이라면 초록 중심 반환 (GREEN은 면적 비율만 사용)
+            center = self._largest_contour_center_ratio(
+                frame, self.lower_green, self.upper_green, self.min_area_green_ratio
+            )
+            return 'GREEN', center, {
+                'green_ratio': green_ratio,
+                'mask_small_shape': green_mask_small_shape
+            }
 
-        # 2) RED 모드: 빨간 그립 탐지 (※ 레드에는 FP 게이트 미적용)
+        # 이미 RED 모드면 빨간 그립 탐지
         center = self._red_center_ratio(frame)
         return 'RED', center, {}
 
@@ -250,10 +252,10 @@ if __name__ == "__main__":
         ar_min=0.35, ar_max=3.20,
         min_mean_s=65,
         # 스위치
-        red_only=True
+        red_only=False   # ← 여기서 False로 두면 GREEN→RED 전환이 동작
     )
 
-    src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/path.mp4"
+    src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/last_test.mp4"
     cap = cv2.VideoCapture(int(src)) if src.isdigit() else cv2.VideoCapture(src)
     if not cap.isOpened():
         print("[ERROR] Cannot open camera/video")
