@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -7,80 +6,64 @@ import cv2
 
 
 class CasualtyDetector:
-
     def __init__(self,
-                 # --- Green (판) HSV ---
+                 # --- Fake Green (판) HSV ---
                  #lower_green=np.array([45, 50, 40], dtype=np.uint8),
                  #upper_green=np.array([85, 255, 255], dtype=np.uint8),
 
-                 # real range for "yawn green" (if red_only = True, 미사용 가능)
+                 # --- Real Green (판) HSV (optional; only used when red_only=False) ---
                  lower_green=np.array([50, 70, 140], dtype=np.uint8),
                  upper_green=np.array([65, 255, 255], dtype=np.uint8),
 
-                 # --- Red (바구니 그립) HSV (양 끝 영역) ---
+                 # --- Red (casualty) HSV (two ranges) ---
                  lower_red1=np.array([0, 100, 120], dtype=np.uint8),
                  upper_red1=np.array([10, 255, 255], dtype=np.uint8),
                  lower_red2=np.array([170, 100, 120], dtype=np.uint8),
                  upper_red2=np.array([179, 255, 255], dtype=np.uint8),
 
-                 # 1280x720 기준 (총 921,600px):
-                 #   green 5000px  ≈ 0.0054253472
-                 #   red    500px  ≈ 0.0005425347
-                 min_area_green_ratio: float = 0.0054253472,
-                 min_area_red_ratio: float = 0.0005425347,
+                 # Area thresholds
+                 # If `min_area` <= 1.0 it's treated as a ratio of the frame pixels.
+                 # If `min_area` > 1.0 it's treated as absolute pixels.
+                 # If `min_area` is None, fall back to *_ratio values below.
+                 min_area: float = None,
+                 min_area_green_ratio: float = 0.0054253472,  # ≈ 5000 / 921600 @ 1280x720
+                 min_area_red_ratio: float = 0.0005425347,    # ≈  500 / 921600 @ 1280x720
 
-                 green_ratio_threshold: float = 0.25,  # (red_only=False일 때 사용)
+                 green_ratio_threshold: float = 0.25,  # switch from GREEN to RED if exceeded
                  use_open: bool = True,
                  open_iters: int = 1,
                  close_iters: int = 2,
-                 mask_scale: float = 0.6,          # 마스크 계산 해상도 (CPU 절약)
+                 mask_scale: float = 0.6,
 
-                 # ------ (참고) 기존 GREEN 게이트 파라미터들: 더 이상 사용하지 않음 ------
-                 min_solidity: float = 0.60,       # (미사용)
-                 min_bbox_fill: float = 0.40,      # (미사용)
-                 ar_min: float = 0.30,             # (미사용)
-                 ar_max: float = 3.50,             # (미사용)
-                 min_mean_s: int = 60,             # (미사용)
+                 # Test switch: if True, skip GREEN and detect RED only
+                 red_only: bool = False):
+        
+        self.lower_green = np.array(lower_green, dtype=np.uint8)
+        self.upper_green = np.array(upper_green, dtype=np.uint8)
+        self.lower_red1  = np.array(lower_red1,  dtype=np.uint8)
+        self.upper_red1  = np.array(upper_red1,  dtype=np.uint8)
+        self.lower_red2  = np.array(lower_red2,  dtype=np.uint8)
+        self.upper_red2  = np.array(upper_red2,  dtype=np.uint8)
 
-                 # ------ 추가: 빨간 전용 테스트 스위치 ------
-                 red_only: bool = False
-                 ):
-        # HSV 범위
-        self.lower_green = lower_green
-        self.upper_green = upper_green
-        self.lower_red1 = lower_red1
-        self.upper_red1 = upper_red1
-        self.lower_red2 = lower_red2
-        self.upper_red2 = upper_red2
-
-        # 비율 파라미터
+        # Area thresholds
         self.min_area_green_ratio = float(min_area_green_ratio)
         self.min_area_red_ratio = float(min_area_red_ratio)
+        self.min_area_input = float(min_area) if min_area is not None else None
 
-        # 기타 파라미터
+        # Other params
         self.green_ratio_threshold = float(green_ratio_threshold)
         self.use_open = bool(use_open)
         self.open_iters = int(max(0, open_iters))
         self.close_iters = int(max(0, close_iters))
         self.mask_scale = float(np.clip(mask_scale, 0.2, 1.0))
 
-        # 모폴로지 커널
+        # Morphology kernel
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
-        # 상태: False → Green 모드, True → Red 모드
+        # Mode: False → GREEN, True → RED
         self.red_mode = False
-
-        # (호환용) 미사용 게이트 파라미터 보관만
-        self.min_solidity = float(min_solidity)
-        self.min_bbox_fill = float(min_bbox_fill)
-        self.ar_min = float(ar_min)
-        self.ar_max = float(ar_max)
-        self.min_mean_s = int(min_mean_s)
-
-        # RED 전용 테스트 스위치
         self.red_only = bool(red_only)
         if self.red_only:
-            # 시작부터 RED 모드로
             self.red_mode = True
 
         try:
@@ -88,33 +71,65 @@ class CasualtyDetector:
         except Exception:
             pass
 
-    # ---------- Public API ----------
+    # ======= Adapters for VisionProcessorNode (ROS2 dynamic params & API) =======
+    def update_param(self, **kwargs):
+        """Accepts updates from ROS2 parameter server."""
+        if 'lower_red1' in kwargs and kwargs['lower_red1'] is not None:
+            self.lower_red1 = np.array(kwargs['lower_red1'], dtype=np.uint8)
+        if 'upper_red1' in kwargs and kwargs['upper_red1'] is not None:
+            arr = np.array(kwargs['upper_red1'], dtype=np.uint8)
+            # Hue clamp to 0..179 (OpenCV HSV)
+            arr[0] = np.uint8(min(int(arr[0]), 179))
+            self.upper_red1 = arr
+        if 'lower_red2' in kwargs and kwargs['lower_red2'] is not None:
+            self.lower_red2 = np.array(kwargs['lower_red2'], dtype=np.uint8)
+        if 'upper_red2' in kwargs and kwargs['upper_red2'] is not None:
+            arr = np.array(kwargs['upper_red2'], dtype=np.uint8)
+            arr[0] = np.uint8(min(int(arr[0]), 179))
+            self.upper_red2 = arr
+
+        if 'min_area' in kwargs and kwargs['min_area'] is not None:
+            self.min_area_input = float(kwargs['min_area'])
+
+        if 'green_ratio_threshold' in kwargs and kwargs['green_ratio_threshold'] is not None:
+            self.green_ratio_threshold = float(kwargs['green_ratio_threshold'])
+        if 'use_open' in kwargs and kwargs['use_open'] is not None:
+            self.use_open = bool(kwargs['use_open'])
+        if 'open_iters' in kwargs and kwargs['open_iters'] is not None:
+            self.open_iters = int(max(0, kwargs['open_iters']))
+        if 'close_iters' in kwargs and kwargs['close_iters'] is not None:
+            self.close_iters = int(max(0, kwargs['close_iters']))
+
+    def detect_casualty(self, frame):
+        """
+        VisionProcessorNode expects: (center, extra)
+        Here, extra is unused (None).
+        """
+        # ===== two-stage 스위칭 사용 =====
+        _, center, _ = self.detect(frame)
+        return center, None
+    # ===========================================================================
+
     def detect(self, frame):
         """
-        반환:
-          mode, center, info
-            - mode: 'GREEN' 또는 'RED'
-            - center: np.array([cx, cy], dtype=int) 또는 None
-            - info: 디버깅용 dict
+        Returns: (mode, center, info)
+          - mode: 'GREEN' or 'RED'
+          - center: np.array([cx, cy], dtype=int) or None
+          - info: dict with debug info (currently green_ratio when in GREEN)
         """
-        # 빨간 전용 모드면, 곧장 RED 탐지 (레드에는 게이트 적용 안 함)
         if self.red_only:
             center = self._red_center_ratio(frame)
             return 'RED', center, {}
 
-        # (일반) 초록→빨강 2단계
         if not self.red_mode:
-            # 1) 초록 비율 계산 (다운스케일)
             green_ratio, green_mask_small_shape = self._green_ratio(frame)
 
-            # 전환 판단
             if green_ratio >= self.green_ratio_threshold:
-                # ★ 변경점: 같은 프레임에서 즉시 RED로 전환하여 반환
+                # immediate switch to RED within the same frame
                 self.red_mode = True
                 center = self._red_center_ratio(frame)
                 return 'RED', center, {}
 
-            # 전환 전이라면 초록 중심 반환 (GREEN은 면적 비율만 사용)
             center = self._largest_contour_center_ratio(
                 frame, self.lower_green, self.upper_green, self.min_area_green_ratio
             )
@@ -123,32 +138,30 @@ class CasualtyDetector:
                 'mask_small_shape': green_mask_small_shape
             }
 
-        # 이미 RED 모드면 빨간 그립 탐지
         center = self._red_center_ratio(frame)
         return 'RED', center, {}
 
     def print_param(self):
-        print("[Detector Parameters]")
+        print("[CasualtyDetector Parameters]")
         print(f"- red_only: {self.red_only}")
         print(f"- Green HSV: {self.lower_green} ~ {self.upper_green}")
         print(f"- Red HSV1 : {self.lower_red1} ~ {self.upper_red1}")
         print(f"- Red HSV2 : {self.lower_red2} ~ {self.upper_red2}")
-        print(f"- min_area_green_ratio: {self.min_area_green_ratio:.8f} (GREEN: area-only)")
-        print(f"- min_area_red_ratio  : {self.min_area_red_ratio:.8f} (RED: area-only)")
+        print(f"- min_area_green_ratio: {self.min_area_green_ratio:.8f} (GREEN area ratio)")
+        if self.min_area_input is None:
+            print(f"- min_area_red_ratio  : {self.min_area_red_ratio:.8f} (RED area ratio)")
+        else:
+            print(f"- min_area_red_input  : {self.min_area_input:.8f} (<=1: ratio, >1: pixels)")
         print(f"- green_ratio_threshold: {self.green_ratio_threshold}")
         print(f"- use_open: {self.use_open}, open_iters: {self.open_iters}, close_iters: {self.close_iters}")
         print(f"- mask_scale: {self.mask_scale}")
-        print(f"- [GREEN gates] disabled (solidity/bbox_fill/AR/meanS not used)")
-        print(f"- [RED gates] disabled (area ratio only)")
 
     # ---------- Internal helpers ----------
     def _green_ratio(self, frame):
-        """
-        초록 픽셀 비율(0~1)을 계산 (다운스케일로 CPU 절약)
-        """
+        """Compute green pixel ratio (downscaled for speed)."""
         h, w = frame.shape[:2]
-        sw = int(w * self.mask_scale)
-        sh = int(h * self.mask_scale)
+        sw = max(1, int(w * self.mask_scale))
+        sh = max(1, int(h * self.mask_scale))
         small = cv2.resize(frame, (sw, sh), interpolation=cv2.INTER_AREA)
 
         hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
@@ -159,18 +172,15 @@ class CasualtyDetector:
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel, iterations=self.close_iters)
 
         green_pixels = int(np.count_nonzero(mask))
-        total_pixels = mask.size
-        ratio = green_pixels / float(total_pixels) if total_pixels > 0 else 0.0
+        total_pixels = int(mask.size) if mask.size > 0 else 1
+        ratio = green_pixels / float(total_pixels)
         return ratio, (sh, sw)
 
     def _largest_contour_center_ratio(self, frame, lower, upper, min_area_ratio: float):
-        """
-        (GREEN) 주어진 HSV 범위에서 가장 큰 컨투어 중심 반환
-        - 임계값: 전체 픽셀 대비 면적 비율 기준만 사용 (게이트 전부 제거)
-        """
+        """Return centroid of the largest contour if area exceeds ratio threshold."""
         h, w = frame.shape[:2]
-        total_pixels = h * w
-        min_area = float(min_area_ratio) * float(total_pixels)
+        total_pixels = float(h * w)
+        min_area = float(min_area_ratio) * total_pixels
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, lower, upper)
@@ -184,13 +194,12 @@ class CasualtyDetector:
             return None
 
         cnt = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(cnt)
-        if area < float(min_area):
+        if cv2.contourArea(cnt) < float(min_area):
             return None
 
         M = cv2.moments(cnt)
         m00 = M.get('m00', 0.0)
-        if m00 <= 1e-6:   # 0 근처 값 방지
+        if m00 <= 1e-6:
             return None
         cx = int(M['m10'] / m00)
         cy = int(M['m01'] / m00)
@@ -198,13 +207,21 @@ class CasualtyDetector:
 
     def _red_center_ratio(self, frame):
         """
-        (RED) 빨간(두 구간) 마스크 → 가장 큰 컨투어 중심만 사용
-        - FP 게이트는 적용하지 않음
-        - 최소 면적 비율(min_area_red_ratio)만 적용
+        Red detection: largest contour centroid if area exceeds threshold.
+        Threshold uses:
+          - min_area_input (<=1: ratio, >1: absolute pixels), if provided;
+          - otherwise min_area_red_ratio (ratio).
         """
         h, w = frame.shape[:2]
-        total_pixels = h * w
-        min_area = float(self.min_area_red_ratio) * float(total_pixels)
+        total_pixels = float(h * w)
+
+        if self.min_area_input is None:
+            min_area = float(self.min_area_red_ratio) * total_pixels
+        else:
+            if self.min_area_input <= 1.0:
+                min_area = float(self.min_area_input) * total_pixels
+            else:
+                min_area = float(self.min_area_input)
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask1 = cv2.inRange(hsv, self.lower_red1, self.upper_red1)
@@ -221,11 +238,9 @@ class CasualtyDetector:
             return None
 
         cnt = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(cnt)
-        if area < float(min_area):
+        if cv2.contourArea(cnt) < float(min_area):
             return None
 
-        # --- 게이트 없음: 바로 중심 계산 ---
         M = cv2.moments(cnt)
         m00 = M.get('m00', 0.0)
         if m00 <= 1e-6:
@@ -239,29 +254,24 @@ class CasualtyDetector:
 if __name__ == "__main__":
     import sys
 
-    # 예: RED-ONLY 테스트 시 red_only=True, 2단계 전체 동작 시 red_only=False
+    # Red-only quick test by default. Set red_only=False to test GREEN→RED switching.
     detector = CasualtyDetector(
-        min_area_green_ratio=0.0054253472,   # (red_only=True면 미사용)
-        min_area_red_ratio=0.0005425347,     # ≈  500 / 921600
-        green_ratio_threshold=0.25,          # (red_only=True면 미사용)
+        min_area=None,                      # if None → uses min_area_red_ratio
+        min_area_green_ratio=0.0054253472,  # ~5000 / 921600
+        min_area_red_ratio=0.0005425347,    # ~ 500 / 921600
+        green_ratio_threshold=0.25,
         use_open=True, open_iters=1, close_iters=2,
         mask_scale=0.5,
-        # (참고) GREEN 게이트 파라미터는 더 이상 사용하지 않음
-        min_solidity=0.65,
-        min_bbox_fill=0.45,
-        ar_min=0.35, ar_max=3.20,
-        min_mean_s=65,
-        # 스위치
-        red_only=False   # ← 여기서 False로 두면 GREEN→RED 전환이 동작
+        red_only=False
     )
 
-    src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/last_test.mp4"
+    src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/video.mp4"
     cap = cv2.VideoCapture(int(src)) if src.isdigit() else cv2.VideoCapture(src)
     if not cap.isOpened():
         print("[ERROR] Cannot open camera/video")
         sys.exit(1)
 
-    # 미리보기 해상도- 실제 컨투어/임계값은 원해상도 프레임 기준
+    # Preview resolution (actual detection uses full frames read by cap)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
 
@@ -271,6 +281,7 @@ if __name__ == "__main__":
         if not ret:
             break
 
+        # For testing UI: use the two-stage `detect` method to show mode/ratio on-screen.
         mode, center, info = detector.detect(frame)
 
         title = "[MODE] RED-ONLY" if detector.red_only else ("[MODE] " + mode)
@@ -290,9 +301,9 @@ if __name__ == "__main__":
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         else:
             cv2.putText(frame, "Center: None", (10, 70),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200,200,200), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
 
-        cv2.imshow("Basket RED-Only / Two-Stage Detection", frame)
+        cv2.imshow("Casualty RED-Only / Two-Stage Detection (Test)", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
