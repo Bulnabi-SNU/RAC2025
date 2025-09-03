@@ -164,11 +164,18 @@ class MissionController(PX4BaseController):
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
         self.accel_subscriber = self.create_subscription(
-        VehicleAcceleration,
-        "/fmu/out/vehicle_acceleration",
-        self.on_vehicle_accel_update,
-        self.qos_profile
-)
+            VehicleAcceleration,
+            "/fmu/out/vehicle_acceleration",
+            self.on_vehicle_accel_update,
+            self.qos_profile
+        )
+        self.attitude_subscriber = self.create_subscription(
+            VehicleAttitude,
+            "/fmu/out/vehicle_attitude",
+            self.on_attitude_update,
+            self.qos_profile
+        )
+
 
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -288,6 +295,9 @@ class MissionController(PX4BaseController):
 
     def on_vehicle_accel_update(self, msg: VehicleAcceleration):
         self.vehicle_acc = msg
+
+    def on_attitude_update(self, msg: VehicleAttitude):
+        self.vehicle_attitude = msg
 
     # =======================================
     # State Machine Handlers
