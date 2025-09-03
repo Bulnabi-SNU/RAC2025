@@ -468,7 +468,9 @@ class MissionController(PX4BaseController):
 
         auto_flag = 0 if self.state is MissionState.INIT else 1
         event_flag = self.mission_wp_num
-        gps_time = self.vehicle_gps.time_utc_usec / 1e6
+        gps_time = int(getattr(self.vehicle_gps, "time_utc_usec", 0))
+        if gps_time <= 0:
+            gps_time = self.get_clock().now().nanoseconds // 1000 
 
 
         if self.vehicle_attitude.timestamp == 0:
