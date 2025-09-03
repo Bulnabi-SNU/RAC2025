@@ -67,6 +67,10 @@ class MissionController(PX4BaseController):
         MissionState.LANDING_TAG_TRACK: 3
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ac5dd9070cc89c92a40349365c503eb8669220a5
     def __init__(self):
         super().__init__("mc_main")
         
