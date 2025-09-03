@@ -178,9 +178,9 @@ class MissionController(PX4BaseController):
             MissionState.OFFBOARD_TO_MISSION: self._handle_mission_continue,
             MissionState.MISSION_EXECUTE: self._handle_mission_execute,
             MissionState.MISSION_TO_OFFBOARD: lambda: self._handle_mission_to_offboard(MissionState.DESCEND),
-            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.3),
+            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.5),
             MissionState.HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND, 5.0),
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 5.0),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 3.0),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
 
 
