@@ -1,6 +1,6 @@
 {
   "name": "DevContainer",
-  "dockerComposeFile": "docker-compose.nvidia.yml",
+  "dockerComposeFile": "docker-compose.jetson.yml",
   "service": "ros2",
   "workspaceFolder": "/workspace",
   // "remoteUser": "bulnabi",

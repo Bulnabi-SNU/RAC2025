@@ -30,6 +30,7 @@ setup(
             'precise_landing = vehicle_controller.precise_landing_test:main',
             'precise_landing_basket = vehicle_controller.precise_landing_basket_test:main',
             'test_logger = vehicle_controller.mc_test_logger:main',
+            'test_mission2offboard = vehicle_controller.mc_mission_offboard_test:main',
         ],
     },
 )

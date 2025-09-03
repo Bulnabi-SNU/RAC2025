@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/l4t-cuda:12.6.11-runtime
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -41,14 +41,19 @@ RUN apt-get install -y ros-humble-ros-base ros-dev-tools rviz
 # Install additional packages
 RUN apt-get install -y sudo vim git python3-pip python3-dev 
 
+# pytorch w cuda
+RUN apt-get install -y libopenblas-dev libomp-dev libopenmpi-dev openmpi-bin openmpi-common gfortran
+WORKDIR /tmp
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/arm64/cuda-keyring_1.1-1_all.deb && \
+dpkg -i cuda-keyring_1.1-1_all.deb && \
+apt-get update && \
+apt-get -y install cusparselt
+
+
+
 # Install python packages
+
 RUN --mount=type=cache,target=/root/.cache/pip pip3 install \
-    opencv-python \
-    opencv-contrib-python \
-    torch \
-    torchvision \
-    torchaudio \
-    ultralytics \
     yolov5 \
     numpy==1.26.4 \
     scipy \
@@ -61,11 +66,16 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install \
     pandas \
     matplotlib \
     timm \
-    transformers \
     tensorboard \
     wandb \
     pyyaml \
     pymap3d
+
+RUN pip install --no-cache https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+RUN pip install --no-deps torchvision==0.20.0
+
+# Use the one in base container (w gstreamer support)
+RUN pip3 uninstall --yes opencv-python
 
 # Install ROS2 packages
 RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \

@@ -48,7 +48,6 @@ class MissionController(PX4BaseController):
         """Load ROS parameters"""
         # NOTE: Copy this function structure from mc_main
         params = [
-            ('timer_period', 0.01),
             ('track_waypoint', 3),  # Waypoint number where tracking should start
             ('mission_altitude', 15.0),
             ('track_min_altitude', 4.0),

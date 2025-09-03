@@ -9,33 +9,33 @@ from rcl_interfaces.msg import SetParametersResult
 import numpy as np
 from enum import Enum
 from typing import Optional
-from scipy.spatial.transform import Rotation
 
 from vehicle_controller.core.px4_base import PX4BaseController
 from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 from custom_msgs.msg import VehicleState, TargetLocation
 from px4_msgs.msg import VehicleAcceleration
-from px4_msgs.msg import VehicleAttitude
 
 
 class MissionState(Enum):
     INIT = "INIT"
-    OFFBOARD_ARM = "OFFBOARD_ARM"
-    MISSION_EXECUTE = "MISSION_EXECUTE"
-    MISSION_TO_OFFBOARD_CASUALTY = "MISSION_TO_OFFBOARD_CASUALTY"
+    OFFBOARD_ARM = "OFFBOARD_ARM" #+ ascend
+    MISSION_EXECUTE = "MISSION_EXECUTE" #d
+    MISSION_TO_OFFBOARD_CASUALTY = "MISSION_TO_OFFBOARD_CASUALTY"#d
     CASUALTY_TRACK = "CASUALTY_TRACK"
     CASUALTY_DESCEND = "CASUALTY_DESCEND"
-    GRIPPER_CLOSE = "GRIPPER_CLOSE"
-    CASUALTY_ASCEND = "CASUALTY_ASCEND"
-    OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION"
-    MISSION_CONTINUE = "MISSION_CONTINUE"
-    MISSION_TO_OFFBOARD_DROP_TAG = "MISSION_TO_OFFBOARD_DROP_TAG"
+    GRIPPER_CLOSE = "GRIPPER_CLOSE" #d hover
+    CASUALTY_ASCEND = "CASUALTY_ASCEND" #altitude change
+    OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION" #d
+    MISSION_CONTINUE = "MISSION_CONTINUE" #d
+    MISSION_TO_OFFBOARD_DROP_TAG = "MISSION_TO_OFFBOARD_DROP_TAG" #d 
     DROP_TAG_TRACK = "DROP_TAG_TRACK"
-    DROP_TAG_DESCEND = "DROP_TAG_DESCEND"
-    GRIPPER_OPEN = "GRIPPER_OPEN"
+    DROP_TAG_DESCEND = "DROP_TAG_DESCEND" #+hover
+    GRIPPER_OPEN = "GRIPPER_OPEN" #d 
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
-    MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG"
+    MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG" #d
+
+
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
     LAND = "LAND"
     MISSION_COMPLETE = "MISSION_COMPLETE"
@@ -65,8 +65,8 @@ class MissionController(PX4BaseController):
         self._initialize_components()
         self._setup_subscribers()
         self.vehicle_acc = VehicleAcceleration()
-        self.vehicle_attitude = VehicleAttitude()
 
+        
         self.state = MissionState.INIT
         self.target: Optional[TargetLocation] = None
         self.mission_paused_waypoint = 0
@@ -148,17 +148,11 @@ class MissionController(PX4BaseController):
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
         self.accel_subscriber = self.create_subscription(
-            VehicleAcceleration,
-            "/fmu/out/vehicle_acceleration",
-            self.on_vehicle_accel_update,
-            self.qos_profile
-        )
-        self.attitude_subscriber = self.create_subscription(
-            VehicleAttitude,
-            "/fmu/out/vehicle_attitude",
-            self.on_attitude_update,
-            self.qos_profile
-        )
+        VehicleAcceleration,
+        "/fmu/out/vehicle_acceleration",
+        self.on_vehicle_accel_update,
+        self.qos_profile
+)
 
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -268,9 +262,6 @@ class MissionController(PX4BaseController):
 
     def on_vehicle_accel_update(self, msg: VehicleAcceleration):
         self.vehicle_acc = msg
-
-    def on_attitude_update(self, msg: VehicleAttitude):
-        self.vehicle_attitude = msg
 
     # =======================================
     # State Machine Handlers
@@ -411,6 +402,7 @@ class MissionController(PX4BaseController):
         self.get_logger().error("Mission in error state")
         # TODO: Implement error recovery or emergency procedures
 
+    
 
     def _log_timer_callback(self):
         """Timer callback to log vehicle data"""
@@ -421,7 +413,9 @@ class MissionController(PX4BaseController):
         auto_flag = 0 if self.state is MissionState.INIT else 1
         event_flag = self.mission_wp_num
         gps_time = self.vehicle_gps.time_utc_usec / 1e6
-
+        gps_time = int(getattr(self.vehicle_gps, "time_utc_usec", 0))
+        if gps_time <= 0:
+            gps_time = self.get_clock().now().nanoseconds // 1000 
 
         if self.vehicle_attitude.timestamp == 0:
             return
@@ -436,27 +430,19 @@ class MissionController(PX4BaseController):
         
         
         self.logger.log_data(
-            auto_flag,                                          #1                                         
-            self.vehicle_gps.latitude_deg,                      #2
-            self.vehicle_gps.longitude_deg,                     #3                
-            self.vehicle_gps.altitude_ellipsoid_m,              #4
-            gps_time,                                           #5
-            self.vehicle_acc.xyz[0],                            #6
-            self.vehicle_acc.xyz[1],                            #7
-            self.vehicle_acc.xyz[2],                            #8
-            self.vehicle_local_position.ax,                     #9
-            self.vehicle_local_position.ay,                     #10
-            self.vehicle_local_position.az,                     #11
-            roll_rad,                                           #12 
-            pitch_rad,                                          #13
-            yaw_rad,                                            #14
-            auto_flag,                                          #15
-            event_flag                                          #16
+            auto_flag, event_flag, gps_time,
+            self.vehicle_gps.latitude_deg,
+            self.vehicle_gps.longitude_deg,
+            self.vehicle_gps.altitude_ellipsoid_m,
+            self.vehicle_acc.xyz[0],
+            self.vehicle_acc.xyz[1],
+            self.vehicle_acc.xyz[2]
         )
 
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
+    def on_attitude_update(self, msg): pass
     def on_global_position_update(self, msg): pass
 
 

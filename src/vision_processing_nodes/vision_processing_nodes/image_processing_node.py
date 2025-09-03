@@ -55,12 +55,12 @@ class VisionProcessorNode(Node):
             namespace='',
             parameters=[
                 ('use_gazebo', False),
-                ('use_jetson', False),
-                ('show_debug_stream', False),
+                ('use_jetson', True),
+                ('show_debug_stream', True),
                 
                 # Camera/streaming parameters
                 ('camera.device', 0),
-                ('camera.rtsp_url', ''),
+                ('camera.rtsp_url', 'rtsp://10.0.0.11:8554/main.264'),
                 ('streaming.target_ip', '192.168.1.100'),
                 ('streaming.port', 5000),
                 ('streaming.width', 1280),
@@ -301,6 +301,7 @@ class VisionProcessorNode(Node):
         
         if self.show_debug_stream:
             cv2.namedWindow("Vision Debug", cv2.WINDOW_NORMAL)
+        
 
     def _setup_hardware_mode(self):
         """Setup for hardware mode with video capture and streaming"""
@@ -316,6 +317,7 @@ class VisionProcessorNode(Node):
         
         if self.show_debug_stream:
             cv2.namedWindow("Vision Debug", cv2.WINDOW_NORMAL)
+            
 
     def _video_capture_thread(self):
         """Video capture thread for hardware mode"""
@@ -343,12 +345,13 @@ class VisionProcessorNode(Node):
                 # "videoconvert ! video/x-raw,format=BGR ! "
                 # "appsink emit-signals=true sync=false max-buffers=2 drop=true"
                 # )
-                
                 gst_pipeline = (
-                    f"rtspsrc location={rtsp_url} latency=0 ! "
-                    f"rtph264depay ! h264parse ! avdec_h264 ! "
-                    f"videoconvert ! video/x-raw,format=BGR ! appsink drop=1"
+                    f"rtspsrc location={rtsp_url} latency=0 buffer-mode=3 protocols=udp ! "
+                    f"rtph264depay ! h264parse ! nvv4l2decoder enable-max-performance=1 disable-dpb=true ! "
+                    f"nvvidconv ! videoconvert ! video/x-raw,format=BGR ! appsink drop=1" 
                 )
+
+                print(gst_pipeline)
                 cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
             else:
                 # Generic RTSP capture
@@ -372,6 +375,7 @@ class VisionProcessorNode(Node):
             ret, frame = cap.read()
             if not ret:
                 self.get_logger().warn("Failed to read frame")
+
                 continue
                 
             # Update current frame with thread safety
@@ -397,7 +401,7 @@ class VisionProcessorNode(Node):
             f"appsrc ! "
             f"videoconvert ! "
             f"video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 ! "
-            f"x264enc bitrate=2000 speed-preset=ultrafast tune=zerolatency ! "
+            f"x264enc bitrate=5000 speed-preset=ultrafast tune=zerolatency ! "
             f"h264parse ! "
             f"rtph264pay config-interval=1 pt=96 ! "
             f"udpsink host={target_ip} port={port}"
@@ -471,6 +475,7 @@ class VisionProcessorNode(Node):
         if self.show_debug_stream:
             cv2.imshow("Vision Debug", annotated_frame)
             cv2.waitKey(1)
+    
 
     def _handle_casualty_detection(self, frame):
         """Handle casualty detection"""
