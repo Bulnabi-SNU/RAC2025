@@ -67,10 +67,7 @@ class MissionController(PX4BaseController):
         MissionState.LANDING_TAG_TRACK: 3
     }
 
-<<<<<<< HEAD
-=======
 
->>>>>>> ac5dd9070cc89c92a40349365c503eb8669220a5
     def __init__(self):
         super().__init__("mc_main")
         
@@ -167,18 +164,11 @@ class MissionController(PX4BaseController):
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
         self.accel_subscriber = self.create_subscription(
-            VehicleAcceleration,
-            "/fmu/out/vehicle_acceleration",
-            self.on_vehicle_accel_update,
-            self.qos_profile
-        )
-        self.attitude_subscriber = self.create_subscription(
-            VehicleAttitude,
-            "/fmu/out/vehicle_attitude",
-            self.on_attitude_update,
-            self.qos_profile
-        )
-
+        VehicleAcceleration,
+        "/fmu/out/vehicle_acceleration",
+        self.on_vehicle_accel_update,
+        self.qos_profile
+)
 
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -190,7 +180,7 @@ class MissionController(PX4BaseController):
             MissionState.MISSION_TO_OFFBOARD: lambda: self._handle_mission_to_offboard(MissionState.DESCEND),
             MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.3),
             MissionState.HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND, 5.0),
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 2.0),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 5.0),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
 
 
@@ -298,9 +288,6 @@ class MissionController(PX4BaseController):
 
     def on_vehicle_accel_update(self, msg: VehicleAcceleration):
         self.vehicle_acc = msg
-
-    def on_attitude_update(self, msg: VehicleAttitude):
-        self.vehicle_attitude = msg
 
     # =======================================
     # State Machine Handlers
@@ -471,9 +458,7 @@ class MissionController(PX4BaseController):
 
         auto_flag = 0 if self.state is MissionState.INIT else 1
         event_flag = self.mission_wp_num
-        gps_time = int(getattr(self.vehicle_gps, "time_utc_usec", 0))
-        if gps_time <= 0:
-            gps_time = self.get_clock().now().nanoseconds // 1000 
+        gps_time = self.vehicle_gps.time_utc_usec / 1e6
 
 
         if self.vehicle_attitude.timestamp == 0:
@@ -510,6 +495,7 @@ class MissionController(PX4BaseController):
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
+    def on_attitude_update(self, msg): pass
     def on_global_position_update(self, msg): pass
 
 
