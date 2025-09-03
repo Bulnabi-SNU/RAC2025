@@ -401,7 +401,6 @@ class MissionController(PX4BaseController):
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
-            self.publish_setpoint(pos_sp=self.pos)  # Hold current position
             self.target_position = None  # Reset for next use
             self.state = next_state
 
