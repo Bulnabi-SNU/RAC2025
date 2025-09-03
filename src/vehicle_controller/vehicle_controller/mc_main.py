@@ -457,7 +457,6 @@ class MissionController(PX4BaseController):
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
-    def on_attitude_update(self, msg):pass
     def on_global_position_update(self, msg): pass
 
 
