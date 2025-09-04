@@ -33,7 +33,7 @@ class Logger:
             (13, 14, 15): 4,        # auto_flag 13~15 -> 대회 WP4
             (16,): 5
         }
-        real_wp=wp_map.get((wp,0)
+        real_wp=wp_map.get(wp,0)
         
 
         # Format latitude, longitude, and altitude to specified precision
