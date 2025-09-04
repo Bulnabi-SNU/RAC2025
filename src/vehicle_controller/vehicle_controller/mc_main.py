@@ -15,7 +15,6 @@ from vehicle_controller.core.px4_base import PX4BaseController
 from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 from custom_msgs.msg import VehicleState, TargetLocation
-from px4_msgs.msg import VehicleAcceleration
 from px4_msgs.msg import VehicleAttitude
 
 
@@ -64,7 +63,6 @@ class MissionController(PX4BaseController):
         self._load_parameters()
         self._initialize_components()
         self._setup_subscribers()
-        self.vehicle_acc = VehicleAcceleration()
         self.vehicle_attitude = VehicleAttitude()
 
         self.state = MissionState.INIT
@@ -146,12 +144,6 @@ class MissionController(PX4BaseController):
         """Setup ROS subscribers"""
         self.target_subscriber = self.create_subscription(
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
-        )
-        self.accel_subscriber = self.create_subscription(
-            VehicleAcceleration,
-            "/fmu/out/vehicle_acceleration",
-            self.on_vehicle_accel_update,
-            self.qos_profile
         )
         self.attitude_subscriber = self.create_subscription(
             VehicleAttitude,
@@ -266,8 +258,6 @@ class MissionController(PX4BaseController):
         """Callback for target coordinates from image_processing_node"""
         self.target = msg if msg is not None else None
 
-    def on_vehicle_accel_update(self, msg: VehicleAcceleration):
-        self.vehicle_acc = msg
 
     def on_attitude_update(self, msg: VehicleAttitude):
         self.vehicle_attitude = msg
@@ -438,22 +428,18 @@ class MissionController(PX4BaseController):
         
         
         self.logger.log_data(
-            auto_flag,                                          #1                                         
+            auto_flag,                                          #1      
+            event_flag,                                   
+            gps_time,
             self.vehicle_gps.latitude_deg,                      #2
             self.vehicle_gps.longitude_deg,                     #3                
             self.vehicle_gps.altitude_ellipsoid_m,              #4
-            gps_time,                                           #5
-            self.vehicle_acc.xyz[0],                            #6
-            self.vehicle_acc.xyz[1],                            #7
-            self.vehicle_acc.xyz[2],                            #8
             self.vehicle_local_position.ax,                     #9
             self.vehicle_local_position.ay,                     #10
             self.vehicle_local_position.az,                     #11
             roll_rad,                                           #12 
             pitch_rad,                                          #13
             yaw_rad,                                            #14
-            auto_flag,                                          #15
-            event_flag                                          #16
         )
 
     # Override methods (placeholders for additional functionality)
