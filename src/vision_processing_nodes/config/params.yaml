@@ -12,7 +12,7 @@ vision_processor_node:
     
     # Streaming configuration
     streaming:
-      target_ip: "10.0.0.136"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
+      target_ip: "10.0.0.127"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
       port: 5000
       width: 1280
       height: 720

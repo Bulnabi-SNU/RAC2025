@@ -178,9 +178,9 @@ class MissionController(PX4BaseController):
             MissionState.OFFBOARD_TO_MISSION: self._handle_mission_continue,
             MissionState.MISSION_EXECUTE: self._handle_mission_execute,
             MissionState.MISSION_TO_OFFBOARD: lambda: self._handle_mission_to_offboard(MissionState.DESCEND),
-            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.3),
+            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 1.5),
             MissionState.HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND, 5.0),
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 5.0),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 3),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
 
 
@@ -389,6 +389,8 @@ class MissionController(PX4BaseController):
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
         
         self.publish_setpoint(pos_sp=self.target_position)
+        self.get_logger().info(f"Current Altitude {-self.pos[2]}")
+        self.get_logger().info(f"Target Altitude {-target_altitude}")
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
@@ -495,7 +497,6 @@ class MissionController(PX4BaseController):
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
-    def on_attitude_update(self, msg): pass
     def on_global_position_update(self, msg): pass
 
 

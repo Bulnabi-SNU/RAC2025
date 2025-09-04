@@ -401,7 +401,7 @@ class VisionProcessorNode(Node):
             f"appsrc ! "
             f"videoconvert ! "
             f"video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 ! "
-            f"x264enc bitrate=5000 speed-preset=ultrafast tune=zerolatency ! "
+            f"x264enc bitrate=4000 speed-preset=ultrafast tune=zerolatency ! "
             f"h264parse ! "
             f"rtph264pay config-interval=1 pt=96 ! "
             f"udpsink host={target_ip} port={port}"
