@@ -9,7 +9,6 @@ from rcl_interfaces.msg import SetParametersResult
 import numpy as np
 from enum import Enum
 from typing import Optional
-from scipy.spatial.transform import Rotation
 
 from vehicle_controller.core.px4_base import PX4BaseController
 from vehicle_controller.core.drone_target_controller import DroneTargetController
@@ -20,21 +19,23 @@ from px4_msgs.msg import VehicleAttitude
 
 class MissionState(Enum):
     INIT = "INIT"
-    OFFBOARD_ARM = "OFFBOARD_ARM"
-    MISSION_EXECUTE = "MISSION_EXECUTE"
-    MISSION_TO_OFFBOARD_CASUALTY = "MISSION_TO_OFFBOARD_CASUALTY"
+    OFFBOARD_ARM = "OFFBOARD_ARM" #+ ascend
+    MISSION_EXECUTE = "MISSION_EXECUTE" #d
+    MISSION_TO_OFFBOARD_CASUALTY = "MISSION_TO_OFFBOARD_CASUALTY"#d
     CASUALTY_TRACK = "CASUALTY_TRACK"
     CASUALTY_DESCEND = "CASUALTY_DESCEND"
-    GRIPPER_CLOSE = "GRIPPER_CLOSE"
-    CASUALTY_ASCEND = "CASUALTY_ASCEND"
-    OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION"
-    MISSION_CONTINUE = "MISSION_CONTINUE"
-    MISSION_TO_OFFBOARD_DROP_TAG = "MISSION_TO_OFFBOARD_DROP_TAG"
+    GRIPPER_CLOSE = "GRIPPER_CLOSE" #d hover
+    CASUALTY_ASCEND = "CASUALTY_ASCEND" #altitude change
+    OFFBOARD_TO_MISSION = "OFFBOARD_TO_MISSION" #d
+    MISSION_CONTINUE = "MISSION_CONTINUE" #d
+    MISSION_TO_OFFBOARD_DROP_TAG = "MISSION_TO_OFFBOARD_DROP_TAG" #d 
     DROP_TAG_TRACK = "DROP_TAG_TRACK"
-    DROP_TAG_DESCEND = "DROP_TAG_DESCEND"
-    GRIPPER_OPEN = "GRIPPER_OPEN"
+    DROP_TAG_DESCEND = "DROP_TAG_DESCEND" #+hover
+    GRIPPER_OPEN = "GRIPPER_OPEN" #d 
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
-    MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG"
+    MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG" #d
+
+
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
     LAND = "LAND"
     MISSION_COMPLETE = "MISSION_COMPLETE"
@@ -258,6 +259,8 @@ class MissionController(PX4BaseController):
         """Callback for target coordinates from image_processing_node"""
         self.target = msg if msg is not None else None
 
+    def on_vehicle_accel_update(self, msg: VehicleAcceleration):
+        self.vehicle_acc = msg
 
     def on_attitude_update(self, msg: VehicleAttitude):
         self.vehicle_attitude = msg
@@ -401,6 +404,7 @@ class MissionController(PX4BaseController):
         self.get_logger().error("Mission in error state")
         # TODO: Implement error recovery or emergency procedures
 
+    
 
     def _log_timer_callback(self):
         """Timer callback to log vehicle data"""
@@ -445,6 +449,7 @@ class MissionController(PX4BaseController):
     # Override methods (placeholders for additional functionality)
     def on_vehicle_status_update(self, msg): pass
     def on_local_position_update(self, msg): pass
+    def on_attitude_update(self, msg): pass
     def on_global_position_update(self, msg): pass
 
 

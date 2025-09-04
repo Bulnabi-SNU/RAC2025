@@ -14,6 +14,7 @@ import cv2
 import os
 import torch
 from ultralytics import YOLO
+from packaging import version 
 
 class LandingTagDetector:
     def __init__(self, tag_size, K, D):
@@ -22,112 +23,175 @@ class LandingTagDetector:
         self.tag_size = tag_size
         self.K = K
         self.D = D
-
         # YOLO attributes
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        self.tag_template = cv2.imread(os.path.join(script_dir, "apriltag_scaled.png"), cv2.IMREAD_GRAYSCALE)
+
         model_file = "best_final_n.pt"
         model_path = os.path.join(script_dir, model_file)
         self.model = YOLO(model_path)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            self.model.to('cuda:0')  
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
-
     def _create_params(self):
-        p = (cv2.aruco.DetectorParameters()
-            if hasattr(cv2.aruco, "DetectorParameters")
-            else cv2.aruco.DetectorParameters_create())
-        # 강건한 검출을 위한 파라미터
-        p.adaptiveThreshWinSizeMin     = 3
-        p.adaptiveThreshWinSizeMax     = 71
-        p.adaptiveThreshWinSizeStep    = 3
-        p.adaptiveThreshConstant       = 2
-        p.minMarkerPerimeterRate       = 0.005
-        p.maxMarkerPerimeterRate       = 5.0
-        p.minCornerDistanceRate        = 0.005
-        p.minOtsuStdDev                = 1.0
-        p.maxErroneousBitsInBorderRate = 0.7
-        p.detectInvertedMarker         = True
-        p.cornerRefinementMethod       = (cv2.aruco.CORNER_REFINE_SUBPIX
-                                        if hasattr(cv2.aruco,"CORNER_REFINE_SUBPIX") else 1)
-        p.cornerRefinementWinSize      = 3
-        return p
+        if hasattr(cv2.aruco, 'DetectorParameters'):
+            params = cv2.aruco.DetectorParameters()
+        else:
+            params = cv2.aruco.DetectorParameters_create()
+        
+        params.minMarkerPerimeterRate = 0.02
 
+        # Performance optimizations
+        params.adaptiveThreshWinSizeMin = 3   
+        params.adaptiveThreshWinSizeMax = 20
+        params.adaptiveThreshWinSizeStep = 4 
+        
+        params.maxErroneousBitsInBorderRate = 0.5
+
+        params.polygonalApproxAccuracyRate = 0.08
+
+        params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_NONE
+
+        params.perspectiveRemovePixelPerCell = 12
+        params.perspectiveRemoveIgnoredMarginPerCell = 0.2
+
+        # Error correction
+        params.errorCorrectionRate = 0.8  # Allow some error correction
+        
+        # Marker border
+        params.markerBorderBits = 1  # Standard border width
+
+        return params
+    
+
+    # TODO: Use SIFT at high alts, use aruco at low alts
     def detect_landing_tag(self, image):
+        a,b = self.detect_landing_tag_aruco(image)
+        if a is not None and False:
+            return a,b
+        else:
+            return self.detect_landing_tag_2(image)
+
+    def detect_landing_tag_aruco(self, image):
         if image is None:
-            return None
-        """
-        1. Apriltag detection - Slow but soundness approved. Either use GPU or discard.
-        """
+            return None, None
         
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h10)
-        detector   = cv2.aruco.ArucoDetector(dictionary, self._create_params())
+        parameters = self._create_params() # or cv2.aruco.DetectorParameters_create()
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = detector.detectMarkers(gray)
-
+        
+        kernel = np.array([[0, -1, 0],
+                       [-1, 5, -1],
+                       [0, -1, 0]])
+        sharpened = cv2.filter2D(gray, -1, kernel)
+        corners, ids, _  = cv2.aruco.detectMarkers(sharpened, dictionary, parameters=parameters)
         if ids is not None and len(ids) > 0:
             img_pts = corners[0].reshape(-1, 2).astype(np.float32)
             tag_center = np.mean(img_pts, axis=0)
             return (tag_center[0], tag_center[1]), "Apriltag"
+        return None, None
 
+    def detect_landing_tag_2(self, image):
         """
-        2. If Apriltag detection fails, try ellipse fitting. Faster and moderate accuracy.
+        Detect landing tag using SIFT feature matching with FLANN
+        Robust to scale, rotation, and distance variations
         """
-        blur = cv2.GaussianBlur(gray, (3, 3), 0)
-        edges = cv2.Canny(blur, 70, 180)
-        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-
-        ellipses = []
-        for c in contours:
-            if len(c) < 50:  continue
-            area = cv2.contourArea(c)
-            if area < 2000:   continue
-            peri = cv2.arcLength(c, True)
-            circ = 4*np.pi*area/(peri**2 + 1e-6)
-            if circ < 0.82:    continue
-            ellipses.append(cv2.fitEllipse(c))
-
-        if len(ellipses) > 0:
-            (cx, cy), (maj, minr), ang = ellipses[0]
-            return (cx, cy), "Ellipse"
-
-        """
-        3. Yolo detection - Fast and sound even in the worst (far) conditions. May cause errors.
-        """
-        yolo_result = self.model(image) # 색깔 있는 cv 형식 이미지로 예측
-                
+        if image is None:
+            return None, None
         
-        for result in yolo_result:
-            items = [result.names[cls.item()] for cls in result.boxes.cls.int()] # ['basket', 이런식으로 나옴]
-            bound_coordinates = result.boxes.xyxyn # [[0,0,0,0], [1,1,1,1]] 이런식으로 tensor로 나옴
-            confidence_level = result.boxes.conf # [0.8, 0.9, ...] 이런식으로 나옴
-
-
-        # 태그인지 확인, confidence 제일 높은거 골라서 center coordinates 찾기.
-        if len(items) > 0:
+        # Initialize feature detector on first run
+        if not hasattr(self, '_feature_detector') or self._feature_detector is None:
+            self._feature_detector = cv2.SIFT_create(
+                nfeatures=500,
+                contrastThreshold=0.05,  # Higher = fewer but stronger features
+                edgeThreshold=10,
+                sigma=1.6
+            )
+        
             
-            # Choose the bounding box with highest confidence if multiple landingtags are detected
-            for i in range(len(confidence_level)):
-                max_confidence = 0
-                index = 0
-                if(confidence_level[i]>=max_confidence):
-                    max_confidence = confidence_level[i]
-                    index = i
+            # FLANN matcher setup for SIFT (using KD-Tree)
+            FLANN_INDEX_KDTREE = 1
+            index_params = dict(
+                algorithm=FLANN_INDEX_KDTREE,
+                trees=5  # Number of trees (5 is good balance)
+            )
+            search_params = dict(
+                checks=50  # How many leafs to check (50 is good balance of speed/accuracy)
+            )
+            self._matcher = cv2.FlannBasedMatcher(index_params, search_params)
+            self._feature_type = "SIFT"
         
-                # Extract center coordinates
-                x1 = bound_coordinates[index][0] * image.shape[1]
-                y1 = bound_coordinates[index][1] * image.shape[0]
-                x2 = bound_coordinates[index][2] * image.shape[1]
-                y2 = bound_coordinates[index][3] * image.shape[0]
-                cx = int((x1+x2)/2)
-                cy = int((y1+y2)/2)
-                return (cx, cy), "Yolo"
-        """
-        4. Feature matching - 시도해보았으나 특징이 너무 부족해서인지 실패.
-        """
-
-        # If everything fails
-        return None, {}
-
+        # Load template features on first run
+        if not hasattr(self, '_template_kp') or self._template_kp is None:
+            template = self.tag_template
+            
+            # Store template dimensions
+            self._template_h, self._template_w = template.shape[:2]
+            
+            # Compute template features
+            self._template_kp, self._template_desc = self._feature_detector.detectAndCompute(template, None)
+            
+            if self._template_desc is None:
+                print("Warning: No features found in template")
+                return None, None
+            
+            # Convert to float32 for FLANN
+            self._template_desc = self._template_desc.astype(np.float32)
+        
+        # Convert image to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Detect features in current frame
+        kp, desc = self._feature_detector.detectAndCompute(gray, None)
+        
+        if desc is None or len(desc) < 4:
+            return None, None
+        
+        # Convert to float32 for FLANN
+        desc = desc.astype(np.float32)
+        
+        # Match features using KNN
+        try:
+            matches = self._matcher.knnMatch(self._template_desc, desc, k=2)
+        except:
+            return None, None
+        
+        # Apply Lowe's ratio test to filter good matches
+        good_matches = []
+        for match_pair in matches:
+            if len(match_pair) == 2:
+                m, n = match_pair
+                # Ratio test - adjust threshold for sensitivity (0.7-0.8 typical)
+                if m.distance < 0.75 * n.distance:
+                    good_matches.append(m)
+        
+        # Need minimum number of matches for reliable detection
+        min_matches = 10
+        
+        if len(good_matches) >= min_matches:
+            # Extract matched keypoints
+            src_pts = np.float32([self._template_kp[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+            
+            # Find homography using RANSAC
+            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5)
+            
+            if M is not None and mask is not None:
+                # Count inliers
+                inliers = sum(mask)
+                # Require minimum inliers for valid detection
+                if inliers >= len(good_matches) * 0.5:
+                    # Transform template corners to find object in image
+                    center_x = np.mean(dst_pts[mask.ravel() == 1, :, 0])
+                    center_y = np.mean(dst_pts[mask.ravel() == 1, :, 1])
+                    
+                    # Validate detection geometry
+                    return (float(center_x), float(center_y)), f"{self._feature_type}"
+        
+        return None, None
 
 
     def update_param(self, tag_size=None, K=None, D=None):

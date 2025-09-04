@@ -45,7 +45,6 @@ class MissionController(PX4BaseController):
         """Load ROS parameters"""
         # NOTE: Copy this function structure from mc_main but adapt parameter names
         params = [
-            ('timer_period', 0.01),
             ('mission_altitude', 10.0),
             ('track_min_altitude', 4.0),
             ('gripper_altitude', 0.3),
@@ -132,7 +131,7 @@ class MissionController(PX4BaseController):
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=self.detect_target_type if self.state == TestState.TRACK else 0
+                detect_target_type=self.detect_target_type
             )
         )
 

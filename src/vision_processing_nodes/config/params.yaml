@@ -8,11 +8,11 @@ vision_processor_node:
     # Camera/Video source
     camera:
       device: 0
-      rtsp_url: "" # Use rtsp://10.0.0.3:8554/h.264 for SIYI (even for h.265)
+      rtsp_url: "rtsp://10.0.0.11:8554/main.264" # Use rtsp://10.0.0.3:8554/h.264 for SIYI (even for h.265)
     
     # Streaming configuration
     streaming:
-      target_ip: "10.0.0.5"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
+      target_ip: "10.0.0.136"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
       port: 5000
       width: 1280
       height: 720
@@ -22,9 +22,9 @@ vision_processor_node:
     detection:
       # Casualty detection
       casualty:
-        lower_red1: [0.0, 100.0, 50.0]
+        lower_red1: [0.0, 100.0, 150.0]
         upper_red1: [10.0, 255.0, 255.0]
-        lower_red2: [170.0, 100.0, 50.0]
+        lower_red2: [170.0, 100.0, 150.0]
         upper_red2: [180.0, 255.0, 255.0]
         min_area: 500.0
       
