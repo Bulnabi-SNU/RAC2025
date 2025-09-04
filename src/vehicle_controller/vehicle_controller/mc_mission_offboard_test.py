@@ -75,7 +75,6 @@ class MissionController(PX4BaseController):
         self._initialize_components()
         self._setup_subscribers()
         self.vehicle_acc = VehicleAcceleration()
-        self.vehicle_attitude = VehicleAttitude()
 
         self.state = MissionState.INIT
         self.target: Optional[TargetLocation] = None
@@ -106,7 +105,7 @@ class MissionController(PX4BaseController):
             ('gripper_altitude', 0.3),
             ('tracking_target_offset', 0.35),
             ('tracking_acceptance_radius_xy', 0.2),
-            ('tracking_acceptance_radius_z', 0.1),
+            ('tracking_acceptance_radius_z', 0.2),
             ('do_logging', True),
         ]
         
@@ -180,27 +179,8 @@ class MissionController(PX4BaseController):
             MissionState.MISSION_TO_OFFBOARD: lambda: self._handle_mission_to_offboard(MissionState.DESCEND),
             MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.5),
             MissionState.HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND, 5.0),
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 3.0),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 10.0),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
-
-
-
-            # MissionState.MISSION_TO_OFFBOARD_CASUALTY: lambda: self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK),
-            # MissionState.CASUALTY_TRACK: lambda: self._handle_track_target(MissionState.CASUALTY_DESCEND),
-            # MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_CLOSE, self.gripper_altitude),
-            # MissionState.GRIPPER_CLOSE: self._handle_gripper_close,
-            # MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
-            # MissionState.MISSION_CONTINUE: self._handle_mission_continue,
-            # MissionState.MISSION_TO_OFFBOARD_DROP_TAG: lambda: self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK),
-            # MissionState.DROP_TAG_TRACK: lambda: self._handle_track_target(MissionState.DROP_TAG_DESCEND),
-            # MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_OPEN, self.gripper_altitude),
-            # MissionState.GRIPPER_OPEN: self._handle_gripper_open,
-            # MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
-            # MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_TRACK),
-            # MissionState.LANDING_TAG_TRACK: lambda: self._handle_track_target(MissionState.LAND),
-            # MissionState.LAND: self._handle_land,
-            # MissionState.MISSION_COMPLETE: self._handle_mission_complete,
-            # MissionState.ERROR: self._handle_error,
         }
         
         handler = state_handlers.get(self.state)
@@ -343,19 +323,13 @@ class MissionController(PX4BaseController):
         current_wp = self.mission_wp_num
 
         # Check if reached descend waypoint
-        if current_wp == self.descend_waypoint:
+        if current_wp == 2:
 
             if self.descend_waypoint_flag == 0:
                 self.descend_waypoint_flag = 1
                 self.mission_paused_waypoint = current_wp
                 self.state = MissionState.MISSION_TO_OFFBOARD
                 self.get_logger().info(f"Transitioning into offboard. Current paused waypoint: {self.mission_paused_waypoint}")
-                return
-            
-            if self.descend_waypoint_flag == 1:
-                current_wp += self.mission_paused_waypoint
-                self.state = MissionState.MISSION_CONTINUE
-        
         
 
 
@@ -387,12 +361,21 @@ class MissionController(PX4BaseController):
         """Descend to target position"""
         if self.target_position is None:
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+
+        delta = self.target_position[2] - self.pos[2]
+        max_del = 0.5
+        if abs(delta) > max_del:
+            delta = np.sign(delta)*max_del
+        min_del = 0.2
+        if abs(delta) < min_del:
+            delta = np.sign(delta)*min_del
         
-        self.publish_setpoint(pos_sp=self.target_position)
+        self.publish_setpoint(pos_sp=[self.target_position[0],self.target_position[1], self.pos[2] + delta])
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
             self.target_position = None  # Reset for next use
+            print("Ascend Descend Done")
             self.state = next_state
 
     def _handle_hover(self, next_state: MissionState, duration=10.0):
@@ -405,8 +388,8 @@ class MissionController(PX4BaseController):
         if self.hover_position is None:
             self.hover_position = self.pos
 
-        self.get_logger().info(f"Hovering for {duration} seconds")
-        self.publish_setpoint(pos_sp=self.hover_position)
+        # self.get_logger().info(f"Hovering for {duration} seconds")
+        self.publish_setpoint(pos_sp=self.hover_position)   
 
         if now_sec >= self.end_time:
             self.get_logger().info("Hover complete")
@@ -457,39 +440,33 @@ class MissionController(PX4BaseController):
             return
 
         auto_flag = 0 if self.state is MissionState.INIT else 1
-        event_flag = self.mission_wp_num
         gps_time = self.vehicle_gps.time_utc_usec / 1e6
 
+        if gps_time is 0:
+            gps_time = time.time()
 
-        if self.vehicle_attitude.timestamp == 0:
-            return
         # --- Convert Quaternion to Euler ---
         # PX4 quaternion order is w, x, y, z. Scipy expects x, y, z, w.
-        q_px4 = self.vehicle_attitude.q
+        q_px4 = self.attitude_q
         r = Rotation.from_quat([q_px4[1], q_px4[2], q_px4[3], q_px4[0]])
         
         # Get Euler angles in radians
         # Scipy default order is ZYX: roll, pitch, yaw
         roll_rad, pitch_rad, yaw_rad = r.as_euler('zyx')
         
-        
         self.logger.log_data(
-            auto_flag,                                          #1                                         
-            self.vehicle_gps.latitude_deg,                      #2
-            self.vehicle_gps.longitude_deg,                     #3                
-            self.vehicle_gps.altitude_ellipsoid_m,              #4
-            gps_time,                                           #5
-            self.vehicle_acc.xyz[0],                            #6
-            self.vehicle_acc.xyz[1],                            #7
-            self.vehicle_acc.xyz[2],                            #8
-            self.vehicle_local_position.ax,                     #9
-            self.vehicle_local_position.ay,                     #10
-            self.vehicle_local_position.az,                     #11
-            roll_rad,                                           #12 
-            pitch_rad,                                          #13
-            yaw_rad,                                            #14
-            auto_flag,                                          #15
-            event_flag                                          #16
+            auto_flag, 
+            self.mission_wp_num, 
+            self.vehicle_gps.latitude_deg,
+            self.vehicle_gps.longitude_deg,
+            self.vehicle_gps.altitude_ellipsoid_m,
+            gps_time,
+            self.vehicle_local_position.ax,
+            self.vehicle_local_position.ay,
+            self.vehicle_local_position.az,
+            roll_rad,
+            pitch_rad,
+            yaw_rad
         )
 
     # Override methods (placeholders for additional functionality)
