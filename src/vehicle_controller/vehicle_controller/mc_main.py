@@ -14,7 +14,7 @@ from vehicle_controller.core.px4_base import PX4BaseController
 from vehicle_controller.core.drone_target_controller import DroneTargetController
 from vehicle_controller.core.logger import Logger
 from custom_msgs.msg import VehicleState, TargetLocation
-from px4_msgs.msg import VehicleAcceleration
+from px4_msgs.msg import VehicleAttitude
 
 
 class MissionState(Enum):
@@ -64,9 +64,8 @@ class MissionController(PX4BaseController):
         self._load_parameters()
         self._initialize_components()
         self._setup_subscribers()
-        self.vehicle_acc = VehicleAcceleration()
+        self.vehicle_attitude = VehicleAttitude()
 
-        
         self.state = MissionState.INIT
         self.target: Optional[TargetLocation] = None
         self.mission_paused_waypoint = 0
@@ -147,12 +146,12 @@ class MissionController(PX4BaseController):
         self.target_subscriber = self.create_subscription(
             TargetLocation, "/target_position", self.on_target_update, self.qos_profile
         )
-        self.accel_subscriber = self.create_subscription(
-        VehicleAcceleration,
-        "/fmu/out/vehicle_acceleration",
-        self.on_vehicle_accel_update,
-        self.qos_profile
-)
+        self.attitude_subscriber = self.create_subscription(
+            VehicleAttitude,
+            "/fmu/out/vehicle_attitude",
+            self.on_attitude_update,
+            self.qos_profile
+        )
 
     def main_loop(self):
         """Main control loop - implements the state machine"""
@@ -263,6 +262,9 @@ class MissionController(PX4BaseController):
     def on_vehicle_accel_update(self, msg: VehicleAcceleration):
         self.vehicle_acc = msg
 
+    def on_attitude_update(self, msg: VehicleAttitude):
+        self.vehicle_attitude = msg
+
     # =======================================
     # State Machine Handlers
     # =======================================
@@ -361,7 +363,16 @@ class MissionController(PX4BaseController):
         if self.target_position is None:
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
         
-        self.publish_setpoint(pos_sp=self.target_position)
+        delta = self.target_position[2] - self.pos[2]
+
+        max_del = 0.5
+        if abs(delta) > max_del:
+            delta = np.sign(delta)*max_del
+        min_del = 0.2
+        if abs(delta) < min_del:
+            delta = np.sign(delta)*min_del
+        
+        self.publish_setpoint(pos_sp=[self.target_position[0],self.target_position[1], self.pos[2] + delta])
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
@@ -428,15 +439,19 @@ class MissionController(PX4BaseController):
         # Scipy default order is ZYX: roll, pitch, yaw
         roll_rad, pitch_rad, yaw_rad = r.as_euler('zyx')
         
-        
         self.logger.log_data(
-            auto_flag, event_flag, gps_time,
+            auto_flag, 
+            self.mission_wp_num, 
             self.vehicle_gps.latitude_deg,
             self.vehicle_gps.longitude_deg,
             self.vehicle_gps.altitude_ellipsoid_m,
-            self.vehicle_acc.xyz[0],
-            self.vehicle_acc.xyz[1],
-            self.vehicle_acc.xyz[2]
+            gps_time,
+            self.vehicle_local_position.ax,
+            self.vehicle_local_position.ay,
+            self.vehicle_local_position.az,
+            roll_rad,
+            pitch_rad,
+            yaw_rad
         )
 
     # Override methods (placeholders for additional functionality)
