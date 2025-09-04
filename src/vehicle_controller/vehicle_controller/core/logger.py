@@ -56,6 +56,7 @@ class Logger:
             self.log_writer.writerow([auto_flag, final_wp_num, lat, long, alt, gps_time, est_ax, est_ay, est_az, roll, pitch, yaw])
             self.log_file.flush()
 
+    
     def start_logging(self):   
         """Start logging data to a new CSV file."""
         if self.log_file:
