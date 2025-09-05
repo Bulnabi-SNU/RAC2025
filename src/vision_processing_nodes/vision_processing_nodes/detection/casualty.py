@@ -106,40 +106,97 @@ class CasualtyDetector:
         Here, extra is unused (None).
         """
         # ===== two-stage 스위칭 사용 =====
-        _, center, _ = self.detect(frame)
+        center = self.detect(frame)
         return center, None
     # ===========================================================================
 
     def detect(self, frame):
-        """
-        Returns: (mode, center, info)
-          - mode: 'GREEN' or 'RED'
-          - center: np.array([cx, cy], dtype=int) or None
-          - info: dict with debug info (currently green_ratio when in GREEN)
-        """
-        if self.red_only:
-            center = self._red_center_ratio(frame)
-            return 'RED', center, {}
-
-        if not self.red_mode:
-            green_ratio, green_mask_small_shape = self._green_ratio(frame)
-
-            if green_ratio >= self.green_ratio_threshold:
-                # immediate switch to RED within the same frame
-                self.red_mode = True
-                center = self._red_center_ratio(frame)
-                return 'RED', center, {}
-
-            center = self._largest_contour_center_ratio(
-                frame, self.lower_green, self.upper_green, self.min_area_green_ratio
-            )
-            return 'GREEN', center, {
-                'green_ratio': green_ratio,
-                'mask_small_shape': green_mask_small_shape
-            }
-
-        center = self._red_center_ratio(frame)
-        return 'RED', center, {}
+        # Convert to HSV for better color detection
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    
+        # Lenient color ranges for various green shades and white/light surfaces
+        lower_green = np.array([35, 40, 40])
+        upper_green = np.array([85, 255, 255])
+        lower_white = np.array([0, 0, 150])
+        upper_white = np.array([180, 40, 255])
+        
+        # Create initial color masks
+        green_mask = cv2.inRange(hsv, lower_green, upper_green)
+        white_mask = cv2.inRange(hsv, lower_white, upper_white)
+        
+        # Morphological kernel for cleaning operations
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        
+        # Clean up masks
+        green_mask_clean = cv2.morphologyEx(green_mask, cv2.MORPH_OPEN, kernel)
+        white_mask_clean = cv2.morphologyEx(white_mask, cv2.MORPH_OPEN, kernel)
+        white_mask_clean = cv2.morphologyEx(white_mask_clean, cv2.MORPH_CLOSE, kernel)
+        
+        # Find all green contours
+        green_contours, _ = cv2.findContours(green_mask_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not green_contours:
+            print("No green areas found")
+            return None
+        
+        # Sort contours by area (largest first) and select top 10
+        green_contours_sorted = sorted(green_contours, key=cv2.contourArea, reverse=True)
+        top_green_contours = green_contours_sorted[:min(10, len(green_contours_sorted))]
+        
+        print(f"Processing {len(top_green_contours)} green areas")
+        
+        # Process each green contour individually
+        valid_white_areas = []
+        min_white_area = 200  # Minimum white area threshold (adjust as needed)
+        
+        for i, contour in enumerate(top_green_contours):
+            green_area = cv2.contourArea(contour)
+            
+            # Filter out very small green contours
+            if green_area < 100:
+                continue
+                
+            # Create mask for this specific green contour (with holes filled)
+            single_green_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            cv2.fillPoly(single_green_mask, [contour], 255)
+            
+            # Find white areas within this green contour
+            white_in_this_green = cv2.bitwise_and(white_mask_clean, single_green_mask)
+            
+            # Calculate white area size
+            white_area = np.sum(white_in_this_green) / 255  # Convert to pixel count
+            
+            print(f"Green contour {i+1}: Green area = {green_area:.0f}, White area = {white_area:.0f}")
+            
+            # Check if white area is large enough
+            if white_area >= min_white_area:
+                print(f"✓ Green contour {i+1} has sufficient white area")
+                
+                # Calculate centroid for this valid white area
+                moments = cv2.moments(white_in_this_green)
+                if moments["m00"] != 0:
+                    centroid_x = int(moments["m10"] / moments["m00"])
+                    centroid_y = int(moments["m01"] / moments["m00"])
+                    
+                    # Store valid white area info
+                    valid_white_areas.append({
+                        'centroid': (centroid_x, centroid_y),
+                        'white_area': white_area,
+                        'green_area': green_area,
+                        'mask': white_in_this_green
+                    })
+            else:
+                print(f"✗ Green contour {i+1} white area too small ({white_area:.0f} < {min_white_area})")
+        
+        # Return result based on valid areas found
+        if not valid_white_areas:
+            print("No green areas contain sufficient white regions")
+            return None
+        
+        # Option 1: Return centroid of the largest valid white area
+        largest_white = max(valid_white_areas, key=lambda x: x['white_area'])
+        print(f"Returning centroid of largest valid white area: {largest_white['centroid']}")
+        return largest_white['centroid']
 
     def print_param(self):
         print("[CasualtyDetector Parameters]")
