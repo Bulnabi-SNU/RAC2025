@@ -34,8 +34,7 @@ class MissionState(Enum):
     GRIPPER_OPEN = "GRIPPER_OPEN" #d 
     DROP_TAG_ASCEND = "DROP_TAG_ASCEND"
     MISSION_TO_OFFBOARD_LANDING_TAG = "MISSION_TO_OFFBOARD_LANDING_TAG" #d
-
-
+    HOLD = "HOLD"
     LANDING_TAG_TRACK = "LANDING_TAG_TRACK"
     LAND = "LAND"
     MISSION_COMPLETE = "MISSION_COMPLETE"
@@ -69,6 +68,7 @@ class MissionController(PX4BaseController):
         self.state = MissionState.INIT
         self.target: Optional[TargetLocation] = None
         self.mission_paused_waypoint = 0
+        self.failed_detection = 0
         self.pickup_complete = False
         self.dropoff_complete = False
         self.target_position = None  # Store position when entering descend/ascend and/or hover
@@ -320,19 +320,19 @@ class MissionController(PX4BaseController):
         current_wp = self.mission_wp_num
 
         # Check if reached pickup waypoint
-        if current_wp == self.casualty_waypoint and not self.pickup_complete:
+        if current_wp == 3  and not self.pickup_complete:
             self.mission_paused_waypoint = current_wp
             self.state = MissionState.MISSION_TO_OFFBOARD_CASUALTY
             return
 
         # Check if reached dropoff waypoint
-        if current_wp == self.drop_tag_waypoint and not self.dropoff_complete:
+        if current_wp == 5 and not self.dropoff_complete:
             self.mission_paused_waypoint = current_wp
             self.state = MissionState.MISSION_TO_OFFBOARD_DROP_TAG
             return
 
         # Check if reached landing waypoint
-        if current_wp == self.landing_tag_waypoint:
+        if current_wp == 6:
             self.state = MissionState.MISSION_TO_OFFBOARD_LANDING_TAG
             return
 
@@ -341,13 +341,23 @@ class MissionController(PX4BaseController):
         if self.is_mission_mode():
             self.set_offboard_mode()
         elif self.is_offboard_mode():
+            self.get_logger().info("Set offboard mode")
             self.state = next_state
 
     def _handle_track_target(self, next_state: MissionState):
         """Track target using vision and transition to next state when arrived"""
         if self.target is None or self.target.status != 0:
+            self.failed_detection += 1 
             self.get_logger().warn("No target coordinates available, waiting for CV detection")
+
+            if self.failed_detection == 500:
+                self.drone_target_controller.reset()
+                self.state = next_state
+                self.failed_detection = 0
+
             return
+
+        self.failed_detection = 0
 
         target_pos, arrived = self.drone_target_controller.update(
             self.pos, self.yaw, self.target.angle_x, self.target.angle_y
@@ -384,7 +394,7 @@ class MissionController(PX4BaseController):
         self.publish_setpoint(pos_sp=self.target_position, yaw_sp = self.target_yaw)
         
         if self.hold_timer >= duration:
-            self.get_logger().info("Hold phase complete. Landing...")
+            self.get_logger().info("Hold phase complete. ")
             self.target_position = None
             self.state = next_state
         else:

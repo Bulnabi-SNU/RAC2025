@@ -270,7 +270,7 @@ class PX4BaseController(Node, ABC):
     def _mission_result_callback(self, msg):
         # This is called only when the waypoint changes.
         self.mission_result = msg
-        self.mission_wp_num = msg.seq_current
+        self.mission_wp_num = msg.seq_reached
 
     # =======================================
     # Additional Overridable Callback Functions
