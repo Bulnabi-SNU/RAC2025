@@ -3,6 +3,7 @@ __contact__ = ""
 
 import os
 import time
+from scipy.spatial.transform import Rotation
 import rclpy
 from rcl_interfaces.msg import SetParametersResult
 
@@ -15,6 +16,8 @@ from vehicle_controller.core.drone_target_controller import DroneTargetControlle
 from vehicle_controller.core.logger import Logger
 from custom_msgs.msg import VehicleState, TargetLocation
 from px4_msgs.msg import VehicleAttitude
+
+
 
 
 class MissionState(Enum):
@@ -73,7 +76,9 @@ class MissionController(PX4BaseController):
         self.dropoff_complete = False
         self.target_position = None  # Store position when entering descend/ascend and/or hover
         self.target_yaw = None # Store yaw data when entering descend/ascend and/or hover
-        
+        self.hold_timer  = 0
+
+        self.event_flag = 1
         
         
         self.get_logger().info("Mission Controller initialized")
@@ -163,15 +168,15 @@ class MissionController(PX4BaseController):
             MissionState.MISSION_EXECUTE: self._handle_mission_execute,
             MissionState.MISSION_TO_OFFBOARD_CASUALTY: lambda: self._handle_mission_to_offboard(MissionState.CASUALTY_TRACK),
             MissionState.CASUALTY_TRACK: lambda: self._handle_track_target(MissionState.CASUALTY_DESCEND),
-            MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_CLOSE, self.gripper_altitude),
+            MissionState.CASUALTY_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_CLOSE, 0.3),
             MissionState.GRIPPER_CLOSE: self._handle_gripper_close,
-            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
+            MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, 35.0),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
             MissionState.MISSION_TO_OFFBOARD_DROP_TAG: lambda: self._handle_mission_to_offboard(MissionState.DROP_TAG_TRACK),
             MissionState.DROP_TAG_TRACK: lambda: self._handle_track_target(MissionState.DROP_TAG_DESCEND),
-            MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_OPEN, self.gripper_altitude),
+            MissionState.DROP_TAG_DESCEND: lambda: self._handle_descend_ascend(MissionState.GRIPPER_OPEN, 0.3),
             MissionState.GRIPPER_OPEN: self._handle_gripper_open,
-            MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, self.mission_altitude),
+            MissionState.DROP_TAG_ASCEND: lambda: self._handle_descend_ascend(MissionState.OFFBOARD_TO_MISSION, 35.0),
             MissionState.MISSION_TO_OFFBOARD_LANDING_TAG: lambda: self._handle_mission_to_offboard(MissionState.LANDING_TAG_TRACK),
             MissionState.LANDING_TAG_TRACK: lambda: self._handle_track_target(MissionState.LAND),
             MissionState.LAND: self._handle_land,
@@ -260,8 +265,6 @@ class MissionController(PX4BaseController):
         """Callback for target coordinates from image_processing_node"""
         self.target = msg if msg is not None else None
 
-    def on_vehicle_accel_update(self, msg: VehicleAcceleration):
-        self.vehicle_acc = msg
 
     def on_attitude_update(self, msg: VehicleAttitude):
         self.vehicle_attitude = msg
@@ -322,17 +325,20 @@ class MissionController(PX4BaseController):
         # Check if reached pickup waypoint
         if current_wp == 3  and not self.pickup_complete:
             self.mission_paused_waypoint = current_wp
+            print("casualty tag")
             self.state = MissionState.MISSION_TO_OFFBOARD_CASUALTY
             return
 
         # Check if reached dropoff waypoint
         if current_wp == 5 and not self.dropoff_complete:
             self.mission_paused_waypoint = current_wp
+            print("drop tag")
             self.state = MissionState.MISSION_TO_OFFBOARD_DROP_TAG
             return
 
         # Check if reached landing waypoint
-        if current_wp == 6:
+        if current_wp == 7:
+            print("landing tag")
             self.state = MissionState.MISSION_TO_OFFBOARD_LANDING_TAG
             return
 
@@ -348,7 +354,7 @@ class MissionController(PX4BaseController):
         """Track target using vision and transition to next state when arrived"""
         if self.target is None or self.target.status != 0:
             self.failed_detection += 1 
-            self.get_logger().warn("No target coordinates available, waiting for CV detection")
+            # self.get_logger().warn("No target coordinates available, waiting for CV detection")
 
             if self.failed_detection == 500:
                 self.drone_target_controller.reset()
@@ -388,7 +394,7 @@ class MissionController(PX4BaseController):
         """Handle holding state"""
         # Hold position at takeoff altitude
         if self.target_position is None:
-            self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+            self.target_position = np.array([self.pos[0], self.pos[1], self.pos[2]])
             self.target_yaw = self.yaw
 
         self.publish_setpoint(pos_sp=self.target_position, yaw_sp = self.target_yaw)
@@ -397,27 +403,28 @@ class MissionController(PX4BaseController):
             self.get_logger().info("Hold phase complete. ")
             self.target_position = None
             self.state = next_state
+            self.hold_timer = 0
         else:
             # Log hold status every second
             if self.hold_timer % int(1.0 / self.timer_period) == 0:
                 remaining_time = (duration - self.hold_timer) * self.timer_period
                 self.get_logger().info(f"Holding... {remaining_time:.1f}s remaining")
             
-            self.hold_timer += 1
+        self.hold_timer += 1
 
     def _handle_gripper_close(self):
         """Close gripper to pick up casualty"""
         # TODO: Implement gripper control
         
         self.pickup_complete = True
-        self._handle_holding(MissionState.CASUALTY_ASCEND, 10)
+        self._handle_holding(MissionState.CASUALTY_ASCEND, 1000)
 
     def _handle_gripper_open(self):
         """Open gripper to release casualty at dropoff point"""
         # TODO: Implement gripper control
         
         self.dropoff_complete = True
-        self._handle_holding(MissionState.DROP_TAG_ASCEND, 10)
+        self._handle_holding(MissionState.DROP_TAG_ASCEND, 1000)
 
 
     def _handle_land(self):
@@ -425,10 +432,6 @@ class MissionController(PX4BaseController):
         self.land()
         self.get_logger().info("Landing command sent")
         self.get_logger().info("Mission Complete!")
-        self.log_timer.cancel() if self.log_timer else None
-        self.state = MissionState.MISSION_COMPLETE
-
-    def _handle_mission_complete(self):
         """Mission finished"""
         pass
         
@@ -446,26 +449,33 @@ class MissionController(PX4BaseController):
             return
 
         auto_flag = 0 if self.state is MissionState.INIT else 1
-        event_flag = self.mission_wp_num
         gps_time = self.vehicle_gps.time_utc_usec / 1e6
         gps_time = int(getattr(self.vehicle_gps, "time_utc_usec", 0))
         if gps_time <= 0:
             gps_time = self.get_clock().now().nanoseconds // 1000 
 
-        if self.vehicle_attitude.timestamp == 0:
-            return
         # --- Convert Quaternion to Euler ---
         # PX4 quaternion order is w, x, y, z. Scipy expects x, y, z, w.
         q_px4 = self.vehicle_attitude.q
         r = Rotation.from_quat([q_px4[1], q_px4[2], q_px4[3], q_px4[0]])
+        #r = Rotation.from_quat([1,0,0,0])
         
+        if self.mission_wp_num == 1:
+            self.event_flag = 6
+        if self.state == MissionState.CASUALTY_ASCEND:
+            self.event_flag = 7
+        if self.state == MissionState.DROP_TAG_ASCEND:
+            self.event_flag = 8
+        if self.state == MissionState.LANDING_TAG_TRACK:
+            self.event_flag = 9
+
         # Get Euler angles in radians
         # Scipy default order is ZYX: roll, pitch, yaw
         roll_rad, pitch_rad, yaw_rad = r.as_euler('zyx')
         
         self.logger.log_data(
             auto_flag, 
-            self.mission_wp_num, 
+            self.event_flag, 
             self.vehicle_gps.latitude_deg,
             self.vehicle_gps.longitude_deg,
             self.vehicle_gps.altitude_ellipsoid_m,

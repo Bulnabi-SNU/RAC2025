@@ -7,7 +7,7 @@
     timer_period: 0.01  # Control loop time step in seconds
 
     # Mission Altitudes (meters)
-    mission_altitude: 10.0  # Normal mission altitude
+    mission_altitude: 35.0  # Normal mission altitude
     track_min_altitude: 4.0  # Min altitude for tracking - blind descend from here
     gripper_altitude: 0.3  # Altitude for pickup/dropoff 
 
