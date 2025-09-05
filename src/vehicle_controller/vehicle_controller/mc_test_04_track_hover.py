@@ -82,6 +82,7 @@ class MissionController(PX4BaseController):
             actual_name = param_name.replace('drone_target_controller.', '')
             self.drone_controller_params[actual_name] = self.get_parameter(param_name).value
 
+
     def _initialize_components(self):
         """Initialize controllers and logger"""
         # NOTE: Copy this function structure from mc_main
@@ -122,6 +123,7 @@ class MissionController(PX4BaseController):
         
         self._publish_vehicle_state()
         
+        
         # NOTE: target_component should be set to 0 for gazebo
         self.publish_gimbal_attitude(target_component=154, flags = 12,
                                      q = [0.7, 0.0, -0.7, 0.0])
@@ -131,8 +133,8 @@ class MissionController(PX4BaseController):
         self.vehicle_state_publisher.publish(
             VehicleState(
                 vehicle_state=self.state.value,
-                detect_target_type=self.detect_target_type
-            )
+                detect_target_type=2            
+                )
         )
 
     def on_target_update(self, msg):
@@ -158,6 +160,9 @@ class MissionController(PX4BaseController):
   
     def _handle_track_target(self):
         """Track target using vision and transition to next state when arrived"""
+        if not self.is_offboard_mode():
+            return
+
         if self.target is None or self.target.status != 0:
             self.get_logger().warn("No target coordinates available")
             return
@@ -180,17 +185,19 @@ class MissionController(PX4BaseController):
 
         if abs(self.pos[2] - (-self.gripper_altitude)) < self.tracking_acceptance_radius_z:
             self.get_logger().info("Reached descent altitude")
+            self.hover_pos = self.pos
+            self.hover_yaw = self.yaw
             self.state = TestState.LAND_OR_HOVER
 
     def _handle_land_or_hover(self):
         """Either land or hover based on parameter"""
-        if self.land_after_track:
+        if self.land_after_track or True:
             self.land()
             self.get_logger().info("Landing command sent")
             self.state = TestState.COMPLETE
         else:
             # Just hover at current position
-            self.publish_setpoint(pos_sp=self.pos)
+            self.publish_setpoint(pos_sp=self.hover_pos, yaw_sp = self.hover_yaw)
             self.get_logger().info("Hovering at target position - Test 04 Complete!")
             self.state = TestState.COMPLETE
             # Could add a timer here to hover for a specific duration

@@ -36,7 +36,7 @@ class CasualtyDetector:
                  mask_scale: float = 0.6,
 
                  # Test switch: if True, skip GREEN and detect RED only
-                 red_only: bool = False):
+                 red_only: bool = True):
         
         self.lower_green = np.array(lower_green, dtype=np.uint8)
         self.upper_green = np.array(upper_green, dtype=np.uint8)
@@ -262,7 +262,7 @@ if __name__ == "__main__":
         green_ratio_threshold=0.25,
         use_open=True, open_iters=1, close_iters=2,
         mask_scale=0.5,
-        red_only=False
+        red_only=True
     )
 
     src = sys.argv[1] if len(sys.argv) > 1 else "/workspace/src/vision_processing_nodes/vision_processing_nodes/detection/video.mp4"

@@ -127,7 +127,7 @@ class PX4BaseController(Node, ABC):
 
         self.vehicle_local_position_subscriber = self.create_subscription(
             VehicleLocalPosition,
-            "/fmu/out/vehicle_local_position_v1",
+            "/fmu/out/vehicle_local_position",
             self._vehicle_local_position_callback,
             self.qos_profile,
         )
@@ -242,7 +242,7 @@ class PX4BaseController(Node, ABC):
         # If home is set then make self.pos relative to home,
         # instead of the EKF2-module start location, except for altitude.
         if self.get_position_flag and self.home_set_flag:
-            self.pos[:2] = self.pos[:2] - self.home_position[:2]
+            self.pos = self.pos - self.home_position
         
         self.on_local_position_update(msg)
 

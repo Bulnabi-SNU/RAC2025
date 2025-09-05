@@ -7,3 +7,5 @@ flight_logs/*
 .devcontainer.json
 
 .gitignore
+*.avi
+*.mp4

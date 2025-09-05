@@ -393,7 +393,7 @@ class VisionProcessorNode(Node):
         width = self.get_parameter('streaming.width').value
         height = self.get_parameter('streaming.height').value
         fps = self.get_parameter('streaming.fps').value
-        
+    
         
         # Jetson Orin Nano has no NVENC so it's the same for all cases.
         
@@ -401,9 +401,9 @@ class VisionProcessorNode(Node):
             f"appsrc ! "
             f"videoconvert ! "
             f"video/x-raw,format=I420,width={width},height={height},framerate={fps}/1 ! "
-            f"x264enc bitrate=4000 speed-preset=ultrafast tune=zerolatency ! "
+            f"x264enc bitrate=500 speed-preset=ultrafast tune=zerolatency ! "
             f"h264parse ! "
-            f"rtph264pay config-interval=1 pt=96 ! "
+            f"rtph264pay config-interval=1 pt=96 mtu=1200 ! "
             f"udpsink host={target_ip} port={port}"
         )
        

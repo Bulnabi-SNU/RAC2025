@@ -12,22 +12,22 @@
     gripper_altitude: 0.3  # Altitude for pickup/dropoff 
 
     # Tracking Parameters
-    tracking_target_offset: 0.35  # Distance between camera and gripper/CoG in meters 
-    tracking_acceptance_radius_xy: 0.2  # Horizontal radius for tracking mode in meters
-    tracking_acceptance_radius_z: 0.2  # Vertical radius for altitude acceptance in meters
+    tracking_target_offset: 0.4  # Distance between camera and gripper/CoG in meters 
+    tracking_acceptance_radius_xy: 0.1  # Horizontal radius for tracking mode in meters
+    tracking_acceptance_radius_z: 0.1  # Vertical radius for altitude acceptance in meters
 
     # DroneTargetController Parameters
     drone_target_controller:
       
       # XY Movement Slew Rate Parameters
-      xy_v_max_default: 3.0  # Default max XY velocity in m/s
-      xy_a_max_default: 1.0  # Default max XY acceleration in m/s^2
+      xy_v_max_default: 2.0  # Default max XY velocity in m/s
+      xy_a_max_default: 0.5  # Default max XY acceleration in m/s^2
       xy_v_max_close: 0.5  # Max XY velocity when close to target in m/s
-      xy_a_max_close: 0.1  # Max XY acceleration when close to target in m/s^2
+      xy_a_max_close: 0.3  # Max XY acceleration when close to target in m/s^2
       
       # Z Movement Slew Rate Parameters
-      z_v_max_default: 10.0  # Default max Z velocity in m/s
-      z_a_max_default: 4.0  # Default max Z acceleration in m/s^2
+      z_v_max_default: 1.0  # Default max Z velocity in m/s
+      z_a_max_default: 0.2  # Default max Z acceleration in m/s^2
       
       # Distance Thresholds
       close_distance_threshold: 0.5  # Distance to switch to close tracking mode in meters
@@ -35,8 +35,8 @@
       descend_radius: 0.5  # Radius for descend mode in meters
       
       # Vertical Tracking Parameters
-      z_velocity_exp_coefficient: 3.0  # Exponential coefficient for Z velocity adjustment
-      z_velocity_exp_offset: 0.5  # Exponential offset for Z velocity adjustment
+      z_velocity_exp_coefficient: 0.5  # Exponential coefficient for Z velocity adjustment
+      z_velocity_exp_offset: 1.0  # Exponential offset for Z velocity adjustment
 
 /mc_main:
   ros__parameters:
@@ -53,7 +53,7 @@
 /mc_test_04:
   ros__parameters:
     detect_target_type: 2  # Type of target to detect - 1: casualty, 2: drop tag, 3: landing tag (1 - 3)
-    land_after_detect: False  # Whether to land after detecting the target
+    land_after_detect: True  # Whether to land after detecting the target
 
 /mc_test_05:
   ros__parameters:

@@ -71,7 +71,8 @@ class MissionController(PX4BaseController):
         self.mission_paused_waypoint = 0
         self.pickup_complete = False
         self.dropoff_complete = False
-        self.target_position = None  # Store position when entering descend/ascend
+        self.target_position = None  # Store position when entering descend/ascend and/or hover
+        self.target_yaw = None # Store yaw data when entering descend/ascend and/or hover
         
         
         
@@ -362,17 +363,10 @@ class MissionController(PX4BaseController):
         """Descend to target position"""
         if self.target_position is None:
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+            self.target_yaw = self.yaw
         
-        delta = self.target_position[2] - self.pos[2]
-
-        max_del = 0.5
-        if abs(delta) > max_del:
-            delta = np.sign(delta)*max_del
-        min_del = 0.2
-        if abs(delta) < min_del:
-            delta = np.sign(delta)*min_del
         
-        self.publish_setpoint(pos_sp=[self.target_position[0],self.target_position[1], self.pos[2] + delta])
+        self.publish_setpoint(pos_sp=[self.target_position[0],self.target_position[1], self.target_position[2]],yaw_sp = self.target_yaw)
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
@@ -380,21 +374,41 @@ class MissionController(PX4BaseController):
             self.target_position = None  # Reset for next use
             self.state = next_state
 
+    def _handle_holding(self, next_state, duration):
+        """Handle holding state"""
+        # Hold position at takeoff altitude
+        if self.target_position is None:
+            self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
+            self.target_yaw = self.yaw
+
+        self.publish_setpoint(pos_sp=self.target_position, yaw_sp = self.target_yaw)
+        
+        if self.hold_timer >= duration:
+            self.get_logger().info("Hold phase complete. Landing...")
+            self.target_position = None
+            self.state = next_state
+        else:
+            # Log hold status every second
+            if self.hold_timer % int(1.0 / self.timer_period) == 0:
+                remaining_time = (duration - self.hold_timer) * self.timer_period
+                self.get_logger().info(f"Holding... {remaining_time:.1f}s remaining")
+            
+            self.hold_timer += 1
+
     def _handle_gripper_close(self):
         """Close gripper to pick up casualty"""
-        self.get_logger().info("Closing gripper to pick up casualty")
         # TODO: Implement gripper control
         
         self.pickup_complete = True
-        self.state = MissionState.CASUALTY_ASCEND
+        self._handle_holding(MissionState.CASUALTY_ASCEND, 10)
 
     def _handle_gripper_open(self):
         """Open gripper to release casualty at dropoff point"""
-        self.get_logger().info("Opening gripper to release casualty at dropoff point")
         # TODO: Implement gripper control
         
         self.dropoff_complete = True
-        self.state = MissionState.DROP_TAG_ASCEND
+        self._handle_holding(MissionState.DROP_TAG_ASCEND, 10)
+
 
     def _handle_land(self):
         """Final landing sequence"""

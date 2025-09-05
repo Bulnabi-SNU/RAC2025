@@ -69,7 +69,7 @@ class LandingTagDetector:
     # TODO: Use SIFT at high alts, use aruco at low alts
     def detect_landing_tag(self, image):
         a,b = self.detect_landing_tag_aruco(image)
-        if a is not None and False:
+        if a is not None or True:
             return a,b
         else:
             return self.detect_landing_tag_2(image)

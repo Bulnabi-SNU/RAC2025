@@ -106,16 +106,17 @@ class DroneTargetController:
                                           drone_position[:2] + target_world_offset[:2])
         
         # Vertical tracking - adjust velocity based on horizontal distance
+        self.slew_z.v_max = self.z_v_max_default
         if distance_xy > self.close_distance_threshold:
             self.slew_z.v_max = self.z_velocity_exp_coefficient * np.exp(
                 self.z_velocity_exp_offset - distance_xy
             )
         if distance_xy > self.far_distance_threshold:
-            self.slew_z.v_max = 0.0
-        
+            self.slew_z.v_max = 0.05
+
         # Vertical tracking
         slewed_z = self.slew_z.slew_rate(drone_position[2], -self.target_altitude)
-        
+        print(drone_position[2], slewed_z)
         target_pos = [*slewed_xy, slewed_z]
         
         # Check if drone is close to target position and hovering

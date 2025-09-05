@@ -12,30 +12,30 @@ vision_processor_node:
     
     # Streaming configuration
     streaming:
-      target_ip: "10.0.0.127"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
+      target_ip: "10.42.0.243"  # Direct UDP target IP. Change to 127.0.0.1 for testing.
       port: 5000
       width: 1280
       height: 720
-      fps: 30
+      fps: 15
     
     # Detection parameters
     detection:
       # Casualty detection
       casualty:
-        lower_red1: [0.0, 100.0, 150.0]
+        lower_red1: [10.0, 255.0, 255.0]
         upper_red1: [10.0, 255.0, 255.0]
-        lower_red2: [170.0, 100.0, 150.0]
+        lower_red2: [160.0, 100.0, 150.0]
         upper_red2: [180.0, 255.0, 255.0]
         min_area: 500.0
       
       # Drop tag detection
       drop_tag:
-        lower_red1: [0.0, 100.0, 50.0]
+        lower_red1: [10.0, 255.0, 255.0]
         upper_red1: [10.0, 255.0, 255.0]
-        lower_red2: [170.0, 100.0, 50.0]
+        lower_red2: [150.0, 80.0, 80.0]
         upper_red2: [180.0, 255.0, 255.0]
-        min_area: 500.0
-        pause_threshold: 0.4
+        min_area: 0.0
+        pause_threshold: 1.0
       
       # Landing tag detection (AprilTag)
       landing_tag:
@@ -47,5 +47,5 @@ vision_processor_node:
     
     # Camera FOV for angle conversion
     camera_fov:
-      horizontal: 89.0
-      vertical: 60.0
+      horizontal: 130.0
+      vertical: 90.0

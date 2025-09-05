@@ -177,7 +177,7 @@ class MissionController(PX4BaseController):
             MissionState.OFFBOARD_TO_MISSION: self._handle_mission_continue,
             MissionState.MISSION_EXECUTE: self._handle_mission_execute,
             MissionState.MISSION_TO_OFFBOARD: lambda: self._handle_mission_to_offboard(MissionState.DESCEND),
-            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 1.5),
+            MissionState.DESCEND: lambda: self._handle_descend_ascend(MissionState.HOVER, 0.5),
             MissionState.HOVER: lambda: self._handle_hover(MissionState.CASUALTY_ASCEND, 5.0),
             MissionState.CASUALTY_ASCEND: lambda: self._handle_descend_ascend(MissionState.MISSION_CONTINUE, 3),
             MissionState.MISSION_CONTINUE: self._handle_mission_continue,
@@ -362,15 +362,8 @@ class MissionController(PX4BaseController):
         if self.target_position is None:
             self.target_position = np.array([self.pos[0], self.pos[1], -target_altitude])
 
-        delta = self.target_position[2] - self.pos[2]
-        max_del = 0.5
-        if abs(delta) > max_del:
-            delta = np.sign(delta)*max_del
-        min_del = 0.2
-        if abs(delta) < min_del:
-            delta = np.sign(delta)*min_del
         
-        self.publish_setpoint(pos_sp=[self.target_position[0],self.target_position[1], self.pos[2] + delta])
+        self.publish_setpoint(pos_sp=self.target_position)
 
         # Assume drone can hold position well. If not, add checking for acceptance radius xy
         if abs(self.pos[2] - self.target_position[2]) < self.tracking_acceptance_radius_z:
